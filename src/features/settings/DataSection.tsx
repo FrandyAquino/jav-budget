@@ -16,19 +16,25 @@ import {
 } from "@/shared/ui";
 import { SettingsLink } from "./SettingsLink";
 import { useT } from "@/shared/i18n/react";
+import { autoBackupSupported } from "@/features/backup/files";
+import { BackupSettings } from "@/features/backup/BackupSettings";
+import { ExportReminder } from "@/features/backup/ExportReminder";
+import { serializeBackup } from "@/features/backup/policy";
 
-type Dialog = "reset" | "demo" | "import";
+type Dialog = "reset" | "demo" | "import" | "restore";
 
 // `onReplaced` runs after the whole ledger (including the profile) was replaced.
 export function DataSection({ onReplaced }: { onReplaced: () => void }) {
   const { state, update, setNotice } = useFinance();
   const form = useFormAction();
   const modalForm = useFormAction();
-  const { t, locale } = useT();
+  const { t, locale, mediumDate } = useT();
   const confirmWord = t("data.confirmWord");
   const [dialog, setDialog] = useState<Dialog>();
   const [confirmation, setConfirmation] = useState("");
   const [backup, setBackup] = useState("");
+  // Date of the automatic backup being restored (dialog "restore").
+  const [restoreDate, setRestoreDate] = useState("");
   const open = (next: Dialog) => {
     setConfirmation("");
     setDialog(next);
@@ -36,7 +42,7 @@ export function DataSection({ onReplaced }: { onReplaced: () => void }) {
   const replace = () =>
     modalForm.run(async () => {
       let restored = dialog === "demo" ? demoState() : emptyState();
-      if (dialog === "import") {
+      if (dialog === "import" || dialog === "restore") {
         if (backup.length > 10_000_000)
           throw new Error(t("data.tooLarge"));
         try {
@@ -59,6 +65,9 @@ export function DataSection({ onReplaced }: { onReplaced: () => void }) {
           appIcon: s.settings.appIcon,
           // Language is a device preference, like the app lock.
           language: s.settings.language,
+          // Backup bookkeeping describes this device, not the restored data.
+          autoBackup: s.settings.autoBackup,
+          lastExportAt: s.settings.lastExportAt,
         },
       }));
       // Photos of the replaced transactions are no longer referenced.
@@ -74,12 +83,28 @@ export function DataSection({ onReplaced }: { onReplaced: () => void }) {
           title={t("data.title")}
           subtitle={t("data.subtitle")}
         />
+        {autoBackupSupported ? (
+          <BackupSettings
+            onRestore={(content, date) => {
+              setBackup(content);
+              setRestoreDate(date);
+              open("restore");
+            }}
+          />
+        ) : (
+          <ExportReminder />
+        )}
         <Action
           secondary
           loading={form.busy}
           onPress={() =>
             void form.run(async () => {
-              await exportBackup(JSON.stringify(state, null, 2));
+              await exportBackup(serializeBackup(state));
+              const exportedAt = new Date().toISOString();
+              await update((s) => ({
+                ...s,
+                settings: { ...s.settings, lastExportAt: exportedAt },
+              }));
               setNotice(t("data.exported"));
             })
           }
@@ -118,7 +143,11 @@ export function DataSection({ onReplaced }: { onReplaced: () => void }) {
       </Card>
       {dialog && (
         <Sheet
-          title={t(`data.dialog.${dialog}`)}
+          title={
+            dialog === "restore"
+              ? t("backup.restoreConfirm", { date: mediumDate(restoreDate) })
+              : t(`data.dialog.${dialog}`)
+          }
           subtitle={t("data.dialogSubtitle")}
           onClose={() => setDialog(undefined)}
         >

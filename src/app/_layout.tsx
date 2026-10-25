@@ -7,6 +7,7 @@ import { FinanceI18nProvider } from "@/features/finance/FinanceI18n";
 import { AppShell } from "@/shared/AppShell";
 import { QuickActionsSync } from "@/features/quick-actions/quick-actions";
 import { WidgetSync } from "@/features/widgets/widget-sync";
+import { BackupSync } from "@/features/backup/BackupSync";
 export { ErrorBoundary } from "expo-router";
 
 void SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -18,6 +19,7 @@ export default function RootLayout() {
           <AppShell />
           <WidgetSync />
           <QuickActionsSync />
+          <BackupSync />
         </FinanceI18nProvider>
       </FinanceProvider>
     </SafeAreaProvider>

@@ -1,9 +1,6 @@
 import { Pressable } from "react-native";
 import { router } from "expo-router";
-import {
-  emptyState,
-  withoutStarterCategories,
-} from "@/features/finance/model";
+import { restartOnboarding } from "@/features/onboarding/setup";
 import { sweepReceipts } from "@/features/transactions/receipts";
 import { useFinance } from "@/features/finance/store";
 import {
@@ -59,7 +56,7 @@ export function WorkspaceSheet({ onClose }: { onClose: () => void }) {
   );
 }
 export function FreshStartSheet({ onClose }: { onClose: () => void }) {
-  const { update, setNotice } = useFinance();
+  const { update } = useFinance();
   const form = useFormAction();
   const { t } = useT();
   return (
@@ -73,17 +70,12 @@ export function FreshStartSheet({ onClose }: { onClose: () => void }) {
         loading={form.busy}
         onPress={() =>
           void form.run(async () => {
-            await update((s) => ({
-              ...emptyState(),
-              settings: s.settings,
-              // Real users only get their own categories, never the starters.
-              categories: withoutStarterCategories(s.categories),
-            }));
+            // Real users only get their own categories, never the starters.
+            // onboarded=false: the root Stack swaps to the onboarding flow.
+            await update(restartOnboarding);
             // The demo transactions and their photos are gone.
             sweepReceipts({ transactions: [] });
             onClose();
-            setNotice(t("home.fresh.notice"));
-            router.push("/accounts");
           })
         }
       >

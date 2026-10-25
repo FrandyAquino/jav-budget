@@ -96,6 +96,7 @@ export function AppShell() {
       <View style={{ width: "100%", maxWidth: 380, gap: 20 }}>{children}</View>
     </View>
   );
+  const onboarded = state.settings.onboarded !== false;
   const lockable = state.settings.biometrics && Platform.OS !== "web";
   const locked = lockable && !unlocked;
   if (Platform.OS === "web" && !hydrated) return null;
@@ -151,13 +152,24 @@ export function AppShell() {
             animation: "slide_from_right",
           }}
         >
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="accounts" />
-          <Stack.Screen name="categories" />
-          <Stack.Screen name="recurring" />
-          <Stack.Screen name="goals" />
-          <Stack.Screen name="settings" />
-          <Stack.Screen name="import" />
+          {/* Until first-run setup is done only onboarding is reachable: deep
+              links and quick actions to other routes redirect to it, and
+              finishing (or resetting to empty data) swaps the stack. */}
+          <Stack.Protected guard={onboarded}>
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="accounts" />
+            <Stack.Screen name="categories" />
+            <Stack.Screen name="recurring" />
+            <Stack.Screen name="goals" />
+            <Stack.Screen name="settings" />
+            <Stack.Screen name="import" />
+          </Stack.Protected>
+          <Stack.Protected guard={!onboarded}>
+            <Stack.Screen
+              name="onboarding"
+              options={{ animation: "fade", gestureEnabled: false }}
+            />
+          </Stack.Protected>
         </Stack>
         {notice ? (
           <Pressable

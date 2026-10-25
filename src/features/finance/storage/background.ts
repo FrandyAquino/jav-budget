@@ -6,6 +6,7 @@ import { processRecurring } from "../model";
 import { parseState } from "../schema";
 import { syncReminders } from "../device";
 import { transact } from "./backend";
+import { runAutoBackup } from "@/features/backup/files";
 
 // Defined at module scope (imported from the root layout) so a background launch can find it.
 export const RECURRING_TASK = "jav-budget:recurring";
@@ -19,6 +20,8 @@ if (!TaskManager.isTaskDefined(RECURRING_TASK))
         setLanguage(resolveLanguage(base.settings.language, getLocales()));
         return parseState(processRecurring(base));
       });
+      // Daily automatic backup (never throws; skipped for demo/unchanged data).
+      if (state) await runAutoBackup(state);
       if (state) await syncReminders(state);
       return BackgroundTask.BackgroundTaskResult.Success;
     } catch {

@@ -113,6 +113,10 @@ const schema = z.object({
     appIcon: z.enum(["graphite", "chalk"]).default("graphite"),
     // Added after v2 shipped; the default keeps older data and backups valid.
     language: z.enum(["system", "es", "en"]).default("system"),
+    // First-run setup is done. Added later: stored data and backups saved
+    // before it existed belong to existing users, so they default to true;
+    // only emptyState() (brand-new installs, resets) starts at false.
+    onboarded: z.boolean().default(true),
     currency,
     appearance: z.enum(["system", "light", "dark"]),
     biometrics: z.boolean(),
@@ -126,6 +130,15 @@ const schema = z.object({
           .max(40)
           .refine((v) => !Number.isNaN(Date.parse(v)), "Invalid timestamp"),
       })
+      .optional(),
+    // Native automatic backups (Documents/Backups); on by default, including
+    // for data and backups saved before the setting existed.
+    autoBackup: z.boolean().default(true),
+    // Last manual export (drives the web export reminder).
+    lastExportAt: z
+      .string()
+      .max(40)
+      .refine((v) => !Number.isNaN(Date.parse(v)), "Invalid timestamp")
       .optional(),
   }),
 });

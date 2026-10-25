@@ -246,10 +246,13 @@ export function emptyState(): FinanceState {
       numberEntry: "decimal",
       appIcon: "graphite",
       language: "system",
+      // Brand-new data goes through the first-run onboarding.
+      onboarded: false,
       currency: "DOP",
       appearance: "system",
       biometrics: false,
       notifications: false,
+      autoBackup: true,
     },
   };
 }
@@ -258,6 +261,8 @@ export function demoState(): FinanceState {
   const month = monthKey();
   const day = Number(today().slice(-2));
   state.demo = true;
+  // Choosing the demo is an onboarding answer; it never shows onboarding.
+  state.settings.onboarded = true;
   state.categories = defaultCategories.map((c) => ({
     ...c,
     name: tr(categoryKeys[c.id]),

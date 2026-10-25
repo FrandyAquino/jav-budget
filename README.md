@@ -45,7 +45,7 @@ Expo Router async routes are explicitly disabled. SDK 58 enables them on web by 
 
 Amounts are integer cents. Account balances and budget totals are derived from transactions. Transfers are one record affecting both accounts and do not count as income or expenses. Writes are validated and persisted before the UI reports success. Web writes use Web Locks where supported to coordinate tabs. Invalid stored data is preserved and presents a recovery error rather than silently resetting it.
 
-The first launch contains clearly labeled sample data. Use **Start fresh** to begin your own ledger. Data stays on this installation: SQLite on iOS/Android (migrated once from the previous AsyncStorage document, which is kept as a backup) and a localStorage document on web. There is no backend, bank integration, or cloud synchronization. Local storage is not encrypted. Device authentication protects the app interface, not an encrypted database. Export backups before clearing app/browser storage.
+The first launch opens a short onboarding (language, default currency and optional DOP/USD rate, first account, starter categories) or, if you prefer, clearly labeled sample data. From the demo, **Start fresh** (or Settings → erase all data) returns to the onboarding. Data saved before onboarding existed is treated as already onboarded. Data stays on this installation: SQLite on iOS/Android (migrated once from the previous AsyncStorage document, which is kept as a backup) and a localStorage document on web. There is no backend, bank integration, or cloud synchronization. Local storage is not encrypted. Device authentication protects the app interface, not an encrypted database. Export backups before clearing app/browser storage.
 
 ## Recurrences and reminders
 
@@ -88,7 +88,7 @@ Test setup lives in `jest.config.js`, `jest.setup.ts` and `__mocks__/`:
 
 ### End-to-end (Maestro)
 
-Flows live in `.maestro/flows/` and cover the same journeys. Each flow starts from a fresh install via `.maestro/subflows/launch-fresh.yaml` (`clearState`), so it runs against the labeled sample data. The flows match English text, so use a simulator set to English.
+Flows live in `.maestro/flows/` and cover the same journeys. Each flow starts from a fresh install via `.maestro/subflows/launch-fresh.yaml` (`clearState`), which picks "Explore with demo data" on the onboarding so it runs against the labeled sample data. The flows match English text, so use a simulator set to English.
 
 ```sh
 # 1. Install Maestro: https://docs.maestro.dev/getting-started/installing-maestro

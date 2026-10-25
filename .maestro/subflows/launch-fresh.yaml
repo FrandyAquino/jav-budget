@@ -1,9 +1,14 @@
-# Fresh install state: clearState wipes the SQLite ledger, so the app starts
-# with its labeled sample (demo) data. Strings assume an English simulator.
+# Fresh install state: clearState wipes the SQLite ledger, so the app opens on
+# the first-run onboarding; the flows continue with its labeled sample (demo)
+# data. Strings assume an English simulator.
 appId: com.frandyaquino.javbudget
 ---
 - launchApp:
     clearState: true
 - extendedWaitUntil:
-    visible: "TOTAL BALANCE"
+    visible: "Explore with demo data"
     timeout: 60000
+- tapOn: "Explore with demo data"
+- extendedWaitUntil:
+    visible: "TOTAL BALANCE"
+    timeout: 30000

@@ -11,7 +11,6 @@ import {
 import { AppState } from "react-native";
 import { getLanguage, subscribeLanguage, t } from "@/shared/i18n/core";
 import {
-  demoState,
   emptyState,
   processRecurring,
   pruneStarterCategoriesOnce,
@@ -42,7 +41,7 @@ type Store = {
 };
 const Context = createContext<Store | null>(null);
 export function FinanceProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<FinanceState>(demoState);
+  const [state, setState] = useState<FinanceState>(emptyState);
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [canStartEmpty, setCanStartEmpty] = useState(false);
@@ -71,7 +70,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     [],
   );
   const load = useCallback(
-    (initial: () => FinanceState = demoState) =>
+    // Nothing stored yet (first launch): start empty with onboarded=false;
+    // AppShell shows the onboarding flow until it is completed.
+    (initial: () => FinanceState = emptyState) =>
       transact((base) =>
         parseState(
           pruneStarterCategoriesOnce(processRecurring(base ?? initial())),

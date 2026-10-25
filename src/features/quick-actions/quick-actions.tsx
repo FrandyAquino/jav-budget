@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 import { router, useNavigationContainerRef, type Href } from "expo-router";
 import * as QuickActions from "expo-quick-actions";
 import { isRouterAction, type RouterAction } from "expo-quick-actions/router";
+import { useFinance } from "@/features/finance/store";
 import { useT } from "@/shared/i18n/react";
 import type { Translate } from "@/shared/i18n/core";
 
@@ -45,10 +46,14 @@ let initialHandled = false;
 export function QuickActionsSync() {
   const navigation = useNavigationContainerRef();
   const { t } = useT();
+  const { state, ready } = useFinance();
+  // No shortcuts until first-run setup is done (an action that still arrives
+  // is redirected to onboarding by the protected root Stack).
+  const available = ready && state.settings.onboarded !== false;
 
   useEffect(() => {
-    void QuickActions.setItems(items(t)).catch(() => {});
-  }, [t]);
+    void QuickActions.setItems(available ? items(t) : []).catch(() => {});
+  }, [t, available]);
 
   useEffect(() => {
     let stopWaiting: (() => void) | undefined;

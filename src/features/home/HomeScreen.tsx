@@ -35,6 +35,7 @@ import { BudgetCard } from "./BudgetCard";
 import { UpcomingCard } from "./UpcomingCard";
 import { FreshStartSheet, WorkspaceSheet } from "./HomeSheets";
 import { useT } from "@/shared/i18n/react";
+import { ExportReminder } from "@/features/backup/ExportReminder";
 
 export default function HomeScreen() {
   const { state } = useFinance();
@@ -70,6 +71,7 @@ export default function HomeScreen() {
       <PeriodSelector period={period} />
       <EntryReportControls report={report} />
       {state.demo && <DemoBanner onPress={() => setFresh(true)} />}
+      <ExportReminder />
       <Grid>
         {[
           <View key="main" style={{ gap: 24 }}>

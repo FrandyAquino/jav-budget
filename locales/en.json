@@ -1,11 +1,11 @@
 {
   "ios": {
-    "CFBundleDisplayName": "jav-budget",
+    "CFBundleDisplayName": "Jav Budget",
     "NSFaceIDUsageDescription": "Use Face ID to unlock your personal finances.",
-    "NSPhotoLibraryUsageDescription": "Allow jav-budget to access your photos to attach receipts.",
-    "NSCameraUsageDescription": "Allow jav-budget to use your camera to photograph receipts."
+    "NSPhotoLibraryUsageDescription": "Allow Jav Budget to access your photos to attach receipts.",
+    "NSCameraUsageDescription": "Allow Jav Budget to use your camera to photograph receipts."
   },
   "android": {
-    "app_name": "jav-budget"
+    "app_name": "Jav Budget"
   }
 }

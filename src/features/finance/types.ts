@@ -80,11 +80,18 @@ export type Settings = {
   appIcon?: "graphite" | "chalk";
   // "system" follows the device language; parseState always fills it.
   language?: "system" | "es" | "en";
+  // False until the first-run onboarding finishes; parseState fills true for
+  // data saved before onboarding existed.
+  onboarded?: boolean;
   currency: Currency;
   appearance: "system" | "light" | "dark";
   biometrics: boolean;
   notifications: boolean;
   exchangeRate?: ExchangeRate;
+  // Native automatic daily backups; parseState fills true.
+  autoBackup?: boolean;
+  // ISO timestamp of the last manual export (web export reminder).
+  lastExportAt?: string;
 };
 export type FinanceState = {
   version: 2;

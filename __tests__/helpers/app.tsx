@@ -46,7 +46,7 @@ export function fixture(patch: Partial<FinanceState> = {}): FinanceState {
       { id: "t-pay", kind: "income", amount: 300_000, accountId: "main", categoryId: "paycheck", title: "October paycheck", note: "", date: TODAY, tags: [] },
     ],
     ...patch,
-    settings: { ...base.settings, name: "Ana", language: "en", ...patch.settings },
+    settings: { ...base.settings, name: "Ana", language: "en", onboarded: true, ...patch.settings },
   };
 }
 
