@@ -1,0 +1,9 @@
+# Fresh install state: clearState wipes the SQLite ledger, so the app starts
+# with its labeled sample (demo) data. Strings assume an English simulator.
+appId: com.frandyaquino.javbudget
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "TOTAL BALANCE"
+    timeout: 60000

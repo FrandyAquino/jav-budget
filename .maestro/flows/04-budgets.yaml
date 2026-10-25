@@ -1,0 +1,41 @@
+appId: com.frandyaquino.javbudget
+name: Budgets - create with rollover, monthly cap, copy from last month
+tags:
+  - core
+  - budgets
+---
+- runFlow: ../subflows/launch-fresh.yaml
+- tapOn: "Budgets"
+# Category budget with rollover (sample data has no Health budget).
+- tapOn: "Create budget"
+- assertVisible: "A new monthly budget"
+- tapOn: "Category: .*"
+- tapOn: "Health"
+- tapOn: "Budget limit"
+- inputText: "2500"
+# The row label and the Switch share this text; index 1 is the Switch.
+- tapOn:
+    text: "Roll over unused amount"
+    index: 1
+- tapOn: "Save budget"
+- assertVisible: "Budget saved"
+- scrollUntilVisible:
+    element: "Edit Health budget"
+- assertVisible: "Monthly limit · rolls over"
+# Overall monthly budget card.
+- scrollUntilVisible:
+    element: "Set a monthly budget"
+    direction: UP
+- tapOn: "Set a monthly budget"
+- tapOn: "Monthly budget limit"
+- eraseText: 20
+- inputText: "100000"
+- tapOn: "Save monthly budget"
+- assertVisible: "Monthly budget saved"
+- assertVisible: "LEFT THIS MONTH"
+# Next month is empty: copy this month's budgets into it.
+- tapOn: "Next month"
+- assertVisible: "A fresh month, a fresh plan"
+- tapOn: "Copy from .*"
+- assertVisible: "Copied .* budgets from .*"
+- assertVisible: "Edit Health budget"

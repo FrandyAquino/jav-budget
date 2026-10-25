@@ -4,35 +4,111 @@
     "slug": "jav-budget",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/icons/graphite.png",
     "scheme": "javbudget",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "bundleIdentifier": "com.frandyaquino.javbudget",
+      "icon": "./assets/icons/graphite.png",
+      "infoPlist": {
+        "CFBundleAllowMixedLocalizations": true
+      }
     },
     "android": {
+      "package": "com.frandyaquino.javbudget",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/icons/graphite.png",
+        "backgroundColor": "#25272B"
       },
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "server",
-      "favicon": "./assets/images/favicon.png"
+      "output": "single",
+      "favicon": "./assets/icons/graphite.png"
+    },
+    "locales": {
+      "en": "./locales/en.json",
+      "es": "./locales/es.json"
     },
     "plugins": [
-      "expo-router",
+      [
+        "expo-router",
+        {
+          "asyncRoutes": false
+        }
+      ],
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#E6EFE9",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      "expo-sharing",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Use Face ID to unlock your personal finances."
+        }
+      ],
+      "expo-notifications",
+      "expo-status-bar",
+      [
+        "expo-alternate-app-icons",
+        [
+          {
+            "name": "Chalk",
+            "ios": "./assets/icons/chalk.png",
+            "android": {
+              "foregroundImage": "./assets/icons/chalk.png",
+              "backgroundColor": "#F5F5F2"
+            }
+          }
+        ]
+      ],
+      "expo-sqlite",
+      [
+        "expo-localization",
+        {
+          "supportedLocales": [
+            "en",
+            "es"
+          ]
+        }
+      ],
+      "expo-background-task",
+      [
+        "expo-widgets",
+        {
+          "bundleIdentifier": "com.frandyaquino.javbudget.ExpoWidgetsTarget",
+          "groupIdentifier": "group.com.frandyaquino.javbudget",
+          "widgets": [
+            {
+              "name": "BudgetWidget",
+              "displayName": "Monthly spending",
+              "description": "This month's spending, budget left and net worth.",
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall",
+                  "systemMedium"
+                ],
+                "initialLayout": "src/features/widgets/budget-widget.tsx"
+              }
+            }
+          ]
+        }
+      ],
+      "expo-quick-actions",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos to attach receipts.",
+          "cameraPermission": "Allow $(PRODUCT_NAME) to use your camera to photograph receipts.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-image"
     ],
     "experiments": {
       "typedRoutes": true,

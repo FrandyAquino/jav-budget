@@ -1,0 +1,16 @@
+appId: com.frandyaquino.javbudget
+name: Activity list and search
+tags:
+  - core
+  - transactions
+---
+- runFlow: ../subflows/launch-fresh.yaml
+- tapOn: "Activity"
+- assertVisible: "Weekend coffee"
+- tapOn: "Search transactions"
+- inputText: "Uber"
+- assertVisible: "Uber ride"
+- assertNotVisible: "Weekend coffee"
+- eraseText: 10
+- inputText: "zzz no match"
+- assertVisible: "Nothing here just yet"

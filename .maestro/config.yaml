@@ -1,0 +1,11 @@
+# Maestro workspace: `maestro test .maestro/` runs every flow in flows/.
+# https://docs.maestro.dev/api-reference/workspace-configuration
+flows:
+  - "flows/*"
+includeTags:
+  - core
+executionOrder:
+  continueOnFailure: true
+platform:
+  ios:
+    disableAnimations: true

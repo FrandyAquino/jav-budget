@@ -1,0 +1,34 @@
+appId: com.frandyaquino.javbudget
+name: Edit a transaction in place, then duplicate it
+tags:
+  - core
+  - transactions
+---
+- runFlow: ../subflows/launch-fresh.yaml
+- tapOn: "Activity"
+- tapOn: "Search transactions"
+- inputText: "Weekend"
+- assertVisible: "1 transaction"
+- tapOn:
+    text: "Edit Weekend coffee.*"
+    index: 0
+- assertVisible: "Edit transaction"
+- tapOn: "Description"
+- eraseText: 40
+- inputText: "Weekend espresso"
+- scrollUntilVisible:
+    element: "Save changes"
+- tapOn: "Save changes"
+- assertVisible: "Transaction updated"
+# Edited, not copied: still one match and the old title is gone.
+- assertVisible: "1 transaction"
+- assertVisible: "Edit Weekend espresso.*"
+- assertNotVisible: "Edit Weekend coffee.*"
+- tapOn:
+    text: "Edit Weekend espresso.*"
+    index: 0
+- scrollUntilVisible:
+    element: "Duplicate for today"
+- tapOn: "Duplicate for today"
+- assertVisible: "Transaction duplicated for today"
+- assertVisible: "2 transactions"

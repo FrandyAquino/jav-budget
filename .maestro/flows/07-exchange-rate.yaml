@@ -1,0 +1,18 @@
+appId: com.frandyaquino.javbudget
+name: Exchange rate combines net worth on Home
+tags:
+  - core
+  - settings
+---
+- runFlow: ../subflows/launch-fresh.yaml
+- assertVisible: "TOTAL BALANCE"
+- tapOn: "Set an exchange rate in Settings to combine your currencies"
+- tapOn: "Exchange rate, Not set"
+- tapOn: "Dominican pesos per US dollar"
+- inputText: "60"
+- tapOn: "Save rate"
+- assertVisible: "Exchange rate saved"
+- tapOn: "Close settings"
+- assertVisible: "NET WORTH"
+- assertVisible: "at RD\\$60\\.00 / US\\$1.*"
+- assertNotVisible: "Set an exchange rate in Settings to combine your currencies"

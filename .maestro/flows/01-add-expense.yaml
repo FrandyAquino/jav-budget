@@ -1,0 +1,24 @@
+appId: com.frandyaquino.javbudget
+name: Add an expense and find it in Activity
+tags:
+  - core
+  - transactions
+---
+- runFlow: ../subflows/launch-fresh.yaml
+- tapOn: "Add"
+- tapOn: "Amount"
+- inputText: "1234.56"
+- tapOn: "Description"
+- inputText: "Maestro groceries"
+- scrollUntilVisible:
+    element: "Save transaction"
+- tapOn: "Save transaction"
+- assertVisible: "Transaction added"
+# The form returns to Home, whose recent activity now lists the entry.
+- assertVisible: "TOTAL BALANCE"
+- assertVisible: "Maestro groceries"
+- tapOn: "Activity"
+- tapOn: "Search transactions"
+- inputText: "Maestro groceries"
+- assertVisible: "1 transaction"
+- assertVisible: "Edit Maestro groceries.*1,234\\.56.*"

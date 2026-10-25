@@ -1,0 +1,104 @@
+export type Currency = "DOP" | "USD";
+export type Kind = "expense" | "income" | "transfer";
+export type Account = {
+  id: string;
+  name: string;
+  type: "bank" | "cash" | "credit";
+  currency: Currency;
+  opening: number;
+  color: string;
+  limit?: number;
+  dueDay?: number;
+};
+export type Category = {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  kind: "expense" | "income";
+};
+export type Split = { categoryId: string; amount: number };
+export type Transaction = {
+  id: string;
+  kind: Kind;
+  amount: number;
+  accountId: string;
+  toAccountId?: string;
+  received?: number;
+  // With splits, categoryId mirrors the largest part (first on ties); use allocations() for totals.
+  categoryId: string;
+  title: string;
+  note: string;
+  date: string;
+  time?: string; // Local wall-clock time; absent for legacy entries.
+  recurringId?: string;
+  // Optional in the type so older call sites compile; parseState always fills [].
+  tags?: string[];
+  receipt?: string; // Local file URI of an attached photo.
+  splits?: Split[];
+  importId?: string; // CSV import fingerprint, used to skip re-imports.
+};
+export type Budget = {
+  id: string;
+  categoryId: string;
+  currency: Currency;
+  month: string;
+  limit: number;
+  rollover?: boolean; // parseState always fills false.
+};
+// Overall spending cap for every expense category in one month and currency.
+export type MonthlyBudget = {
+  id: string;
+  currency: Currency;
+  month: string;
+  limit: number;
+};
+export type Recurring = Omit<
+  Transaction,
+  "id" | "date" | "recurringId" | "receipt" | "importId"
+> & {
+  id: string;
+  nextDate: string;
+  frequency: "daily" | "weekly" | "biweekly" | "monthly" | "custom";
+  intervalDays?: number;
+  anchorDay: number;
+  active: boolean;
+  subscription: boolean;
+};
+export type Goal = {
+  id: string;
+  name: string;
+  currency: Currency;
+  target: number;
+  saved: number;
+};
+export type ExchangeRate = { dopPerUsd: number; updatedAt: string };
+export type Settings = {
+  name: string;
+  email?: string;
+  numberEntry?: "decimal" | "cents";
+  appIcon?: "graphite" | "chalk";
+  // "system" follows the device language; parseState always fills it.
+  language?: "system" | "es" | "en";
+  currency: Currency;
+  appearance: "system" | "light" | "dark";
+  biometrics: boolean;
+  notifications: boolean;
+  exchangeRate?: ExchangeRate;
+};
+export type FinanceState = {
+  version: 2;
+  demo: boolean;
+  // One-time migration marker: unused starter categories were removed from
+  // pre-existing non-demo data. parseState always fills it (false for old data).
+  starterPruned?: boolean;
+  accounts: Account[];
+  categories: Category[];
+  transactions: Transaction[];
+  budgets: Budget[];
+  monthlyBudgets: MonthlyBudget[];
+  recurring: Recurring[];
+  goals: Goal[];
+  settings: Settings;
+};
+export type DateRange = { from: string; to: string };

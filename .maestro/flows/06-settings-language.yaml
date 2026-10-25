@@ -1,0 +1,16 @@
+appId: com.frandyaquino.javbudget
+name: Switch language to Español
+tags:
+  - core
+  - settings
+---
+- runFlow: ../subflows/launch-fresh.yaml
+# The sample data holds DOP and USD, so Home offers a shortcut to Settings.
+- tapOn: "Set an exchange rate in Settings to combine your currencies"
+- assertVisible: "Settings"
+- tapOn: "Language: .*"
+- tapOn: "Español"
+- assertVisible: "Ajustes"
+- assertVisible: "Preferencias"
+- tapOn: "Cerrar ajustes"
+- assertVisible: "Inicio"

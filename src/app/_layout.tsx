@@ -1,18 +1,25 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import "../global.css";
+import "@/features/finance/storage/background";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import * as SplashScreen from "expo-splash-screen";
+import { FinanceProvider } from "@/features/finance/store";
+import { FinanceI18nProvider } from "@/features/finance/FinanceI18n";
+import { AppShell } from "@/shared/AppShell";
+import { QuickActionsSync } from "@/features/quick-actions/quick-actions";
+import { WidgetSync } from "@/features/widgets/widget-sync";
+export { ErrorBoundary } from "expo-router";
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
-
-SplashScreen.preventAutoHideAsync();
-
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+void SplashScreen.preventAutoHideAsync().catch(() => {});
+export default function RootLayout() {
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <FinanceProvider>
+        <FinanceI18nProvider>
+          <AppShell />
+          <WidgetSync />
+          <QuickActionsSync />
+        </FinanceI18nProvider>
+      </FinanceProvider>
+    </SafeAreaProvider>
   );
 }

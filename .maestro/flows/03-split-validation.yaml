@@ -1,0 +1,34 @@
+appId: com.frandyaquino.javbudget
+name: Split transaction validation
+tags:
+  - core
+  - transactions
+---
+- runFlow: ../subflows/launch-fresh.yaml
+- tapOn: "Add"
+- tapOn: "Amount"
+- inputText: "1000"
+- tapOn: "Description"
+- inputText: "Maestro split"
+- tapOn: "Split"
+- assertVisible: "Remaining to allocate · .*"
+- tapOn: "Amount for part 1"
+- inputText: "600"
+- tapOn: "Amount for part 2"
+- inputText: "500"
+- assertVisible: "Over by .*"
+- scrollUntilVisible:
+    element: "Save transaction"
+- tapOn: "Save transaction"
+- assertVisible: "Split parts must add up to the total amount\\."
+- scrollUntilVisible:
+    element: "Amount for part 2"
+    direction: UP
+- tapOn: "Amount for part 2"
+- eraseText: 10
+- inputText: "400"
+- assertVisible: "Fully allocated"
+- scrollUntilVisible:
+    element: "Save transaction"
+- tapOn: "Save transaction"
+- assertVisible: "Transaction added"

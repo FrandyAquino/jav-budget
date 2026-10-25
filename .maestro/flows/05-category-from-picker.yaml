@@ -1,0 +1,21 @@
+appId: com.frandyaquino.javbudget
+name: Create a category from the budget form picker
+tags:
+  - core
+  - categories
+---
+- runFlow: ../subflows/launch-fresh.yaml
+- tapOn: "Budgets"
+- tapOn: "Create budget"
+- tapOn: "Category: .*"
+- tapOn: "Create category"
+- assertVisible: "New category"
+- tapOn: "Category name"
+- inputText: "Maestro pets"
+- tapOn: "Save category"
+- assertVisible: "Category: Maestro pets"
+- tapOn: "Budget limit"
+- inputText: "1500"
+- tapOn: "Save budget"
+- scrollUntilVisible:
+    element: "Edit Maestro pets budget"
