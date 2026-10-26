@@ -11,7 +11,9 @@ EAS project: `@frandyaquino/jav-budget` (`extra.eas.projectId` in `app.json`). U
 | `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` | EAS secrets | Needed to upload source maps; then remove `SENTRY_DISABLE_AUTO_UPLOAD` from `eas.json`. |
 | Supabase migrations | `supabase/migrations/` | Applied to project `ldhuiyinksudcfpxbuqh` (sync, delete_account). |
 
-Supabase Auth (project `ldhuiyinksudcfpxbuqh`): the OTP is 6 digits and expires in 10 minutes (set October 26). **Sign-in doesn't work for real users yet**: the default templates send a link, not the code, and the free plan only allows editing templates with a custom SMTP sender (the built-in one also sends just 2 emails per hour). Once SMTP is set (Dashboard → Authentication → Emails → SMTP Settings, e.g. Resend), apply the code templates:
+Supabase Auth (project `ldhuiyinksudcfpxbuqh`, set October 26): 6-digit codes that expire in 10 minutes; code email templates from `supabase/email/auth-templates.json`; SMTP through Resend (`smtp.resend.com:465`, user `resend`, sender `Jav Budget <onboarding@resend.dev>`, 30 emails/hour).
+
+**Before launch:** `onboarding@resend.dev` only delivers to the Resend account's own address. Verify a domain in Resend, then change the sender (Dashboard → Authentication → Emails → SMTP Settings, or `smtp_admin_email` through the Management API). To re-apply the templates:
 
 ```sh
 T=$(security find-generic-password -s "Supabase CLI" -a supabase -w); T=${T#go-keyring-base64:}; T=$(echo "$T" | base64 -d 2>/dev/null || echo "$T")
