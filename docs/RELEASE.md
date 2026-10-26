@@ -33,6 +33,10 @@ npx eas-cli@latest submit --profile production --platform ios
 
 iOS needs an Apple Developer account; the first build creates certificates and profiles for the app and the `ExpoWidgetsTarget` extension (App Group `group.com.frandyaquino.javbudget`). Android's first build creates the upload keystore; keep EAS as its owner.
 
+## Web
+
+`npm run deploy:web` exports the web build and deploys it to EAS Hosting: https://jav-budget.expo.app (first deployed October 26, 2026). On an iPhone without a developer build, open it in Safari → Share → Add to Home Screen. Web has no Face ID, notifications, widget or encrypted ledger (data stays unencrypted in the browser's storage).
+
 ## 3. Device QA (physical iPhone and Android phone)
 
 - [ ] Fresh install → onboarding → first expense → Home balance.
