@@ -57,6 +57,9 @@ Copy, privacy answers and review notes: `docs/STORE.md`. Privacy policy: `docs/P
 
 ## Known limits
 
+- Xcode 27 clean builds fail in ExpoSQLite with "module '_Builtin_stdarg' is needed but has not been provided" (Swift explicit modules). Build with `SWIFT_ENABLE_EXPLICIT_MODULES=NO`, e.g. `xcodebuild -workspace ios/JavBudget.xcworkspace -scheme JavBudget -configuration Release -destination id=<simulator> SWIFT_ENABLE_EXPLICIT_MODULES=NO build`. Incremental `npx expo run:ios` builds work. Watch for it on the first EAS iOS build.
+- Email sign-in was verified end to end on October 26 (code from Resend to `delivered@resend.dev`, verified in the app, then Settings → Delete account removed the user and its rows).
+
 - `npm audit`: high-severity advisories in `node-forge` and `zod@3` come only from `@expo/cli` (build tooling, not shipped in the app). No fixed `node-forge` exists yet; re-check on Expo SDK patch releases.
 - The Supabase session token is stored by `expo-sqlite/localStorage` unencrypted; the ledger itself is encrypted.
 - Android Auto Backup restores the encrypted ledger without its keystore key; on such a restore the app reports the data as unreadable and offers to start empty (sync or a JSON backup restores it).

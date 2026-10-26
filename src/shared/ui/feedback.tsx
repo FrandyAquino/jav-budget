@@ -21,13 +21,13 @@ export function Sheet({
   open?: boolean;
 }) {
   const { colors } = useTheme();
-  // PanelUI's sheet doesn't move for the keyboard. A spacer as tall as the
-  // keyboard (less the sheet's own bottom padding) lifts a short sheet's
-  // content above it; a sheet already at full height keeps its size and its
-  // body insets itself instead (automaticallyAdjustKeyboardInsets, iOS).
+  // PanelUI's sheet doesn't move for the keyboard. Padding the body's content
+  // by the keyboard's height (less the sheet's own bottom padding) makes a
+  // short sheet grow above it, and lets a full-height one scroll its last
+  // fields and actions into view.
   const keyboard = useKeyboardHeight();
   const insets = useSafeAreaInsets();
-  const spacer = keyboard ? Math.max(0, keyboard - Math.max(insets.bottom, 16)) : 0;
+  const lift = keyboard ? Math.max(0, keyboard - Math.max(insets.bottom, 16)) : 0;
   return (
     <BottomSheet
       open={open}
@@ -54,14 +54,12 @@ export function Sheet({
         />
         <BottomSheet.Body
           keyboardShouldPersistTaps="handled"
-          automaticallyAdjustKeyboardInsets
           // Number pads have no return key: dragging the form closes them.
           keyboardDismissMode="on-drag"
-          contentContainerStyle={{ padding: 24, gap: 18, paddingBottom: 42 }}
+          contentContainerStyle={{ padding: 24, gap: 18, paddingBottom: 42 + lift }}
         >
           {children}
         </BottomSheet.Body>
-        {Platform.OS === "ios" ? <View style={{ height: spacer }} /> : null}
       </BottomSheet.Content>
     </BottomSheet>
   );
