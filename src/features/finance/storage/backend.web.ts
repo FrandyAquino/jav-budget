@@ -1,14 +1,35 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { t } from "@/shared/i18n/core";
 import type { FinanceState } from "../model";
 import { parseState } from "../schema";
 import {
   LEGACY_KEY,
   keepRecoveryCopy,
+  notifyOutbox,
   optimisticUpdate,
+  patchSyncLocal,
   serialize,
   UnreadableDataError,
   type Listener,
+  type SyncLocal,
+  type SyncWork,
+  type TransactOptions,
 } from "./shared";
+import { syncChanges } from "@/features/sync/core";
+
+// Cloud-sync bookkeeping (outbox + small values), written under the same lock.
+const SYNC_KEY = "jav-budget:sync:v1";
+async function readSyncLocal(): Promise<SyncLocal> {
+  try {
+    const raw = await AsyncStorage.getItem(SYNC_KEY);
+    const parsed = raw ? (JSON.parse(raw) as Partial<SyncLocal>) : {};
+    return { outbox: { ...parsed.outbox }, values: { ...parsed.values } };
+  } catch {
+    return { outbox: {}, values: {} };
+  }
+}
+const writeSyncLocal = (local: SyncLocal) =>
+  AsyncStorage.setItem(SYNC_KEY, JSON.stringify(local));
 
 // Web: one JSON document in localStorage (via AsyncStorage), coordinated across tabs with Web Locks,
 // or an optimistic re-read-before-write check where Web Locks are unavailable.
@@ -32,24 +53,37 @@ const locked = () => typeof navigator !== "undefined" && !!navigator.locks;
 
 export function transact<R extends FinanceState | null>(
   change: (base: FinanceState | null) => R,
+  options: TransactOptions = {},
 ): Promise<R> {
   return serialize(() =>
     withLock(async () => {
       let raw: string | null = null;
+      let base: FinanceState | null = null;
       try {
         const result = await optimisticUpdate(
           () => AsyncStorage.getItem(LEGACY_KEY),
           (data) => AsyncStorage.setItem(LEGACY_KEY, data),
           (current) => {
             raw = current;
-            const result = change(current ? parseStored(current) : null);
+            base = current ? parseStored(current) : null;
+            const result = change(base);
             return { result, data: result ? JSON.stringify(result) : undefined };
           },
           // With Web Locks there is no race to retry.
           locked() ? 1 : 5,
         );
-        if (result && JSON.stringify(result) !== raw)
+        if (result && JSON.stringify(result) !== raw) {
+          const keys = options.record === false ? [] : syncChanges(base, result);
+          if (keys.length) {
+            const at = new Date().toISOString();
+            const local = await readSyncLocal();
+            await writeSyncLocal(
+              patchSyncLocal(local, { outbox: Object.fromEntries(keys.map((k) => [k, at])) }),
+            );
+          }
           for (const listener of listeners) listener(result);
+          if (keys.length) notifyOutbox();
+        }
         return result;
       } catch (error) {
         // Keep the unreadable value so "start with empty data" loses nothing.
@@ -57,6 +91,30 @@ export function transact<R extends FinanceState | null>(
           await keepRecoveryCopy(AsyncStorage, raw);
         throw error;
       }
+    }),
+  );
+}
+// Reads the ledger and the sync bookkeeping and writes what `work` returns
+// under the same lock. A returned state is not added to the outbox.
+export function syncTransact<R>(
+  work: (base: FinanceState | null, local: SyncLocal) => SyncWork<R>,
+): Promise<R> {
+  return serialize(() =>
+    withLock(async () => {
+      const raw = await AsyncStorage.getItem(LEGACY_KEY);
+      const local = await readSyncLocal();
+      const output = work(raw ? parseStored(raw) : null, local);
+      if (output.state) {
+        const data = JSON.stringify(output.state);
+        if (data !== raw) {
+          if ((await AsyncStorage.getItem(LEGACY_KEY)) !== raw)
+            throw new Error(t("store.storageBusy"));
+          await AsyncStorage.setItem(LEGACY_KEY, data);
+          for (const listener of listeners) listener(output.state);
+        }
+      }
+      if (output.patch) await writeSyncLocal(patchSyncLocal(local, output.patch));
+      return output.result;
     }),
   );
 }

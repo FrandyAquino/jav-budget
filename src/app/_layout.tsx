@@ -8,6 +8,7 @@ import { AppShell } from "@/shared/AppShell";
 import { QuickActionsSync } from "@/features/quick-actions/quick-actions";
 import { WidgetSync } from "@/features/widgets/widget-sync";
 import { BackupSync } from "@/features/backup/BackupSync";
+import { SyncAgent } from "@/features/sync/SyncAgent";
 export { ErrorBoundary } from "expo-router";
 
 void SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -20,6 +21,7 @@ export default function RootLayout() {
           <WidgetSync />
           <QuickActionsSync />
           <BackupSync />
+          <SyncAgent />
         </FinanceI18nProvider>
       </FinanceProvider>
     </SafeAreaProvider>

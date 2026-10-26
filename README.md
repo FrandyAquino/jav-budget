@@ -45,7 +45,17 @@ Expo Router async routes are explicitly disabled. SDK 58 enables them on web by 
 
 Amounts are integer cents. Account balances and budget totals are derived from transactions. Transfers are one record affecting both accounts and do not count as income or expenses. Writes are validated and persisted before the UI reports success. Web writes use Web Locks where supported to coordinate tabs. Invalid stored data is preserved and presents a recovery error rather than silently resetting it.
 
-The first launch opens a short onboarding (language, default currency and optional DOP/USD rate, first account, starter categories) or, if you prefer, clearly labeled sample data. From the demo, **Start fresh** (or Settings → erase all data) returns to the onboarding. Data saved before onboarding existed is treated as already onboarded. Data stays on this installation: SQLite on iOS/Android (migrated once from the previous AsyncStorage document, which is kept as a backup) and a localStorage document on web. There is no backend, bank integration, or cloud synchronization. Local storage is not encrypted. Device authentication protects the app interface, not an encrypted database. Export backups before clearing app/browser storage.
+The first launch opens a short onboarding (language, default currency and optional DOP/USD rate, first account, starter categories) or, if you prefer, clearly labeled sample data. From the demo, **Start fresh** (or Settings → erase all data) returns to the onboarding. Data saved before onboarding existed is treated as already onboarded. Data stays on this installation: SQLite on iOS/Android (migrated once from the previous AsyncStorage document, which is kept as a backup) and a localStorage document on web. There is no bank integration; cloud sync is optional (below). Local storage is not encrypted. Device authentication protects the app interface, not an encrypted database. Export backups before clearing app/browser storage.
+
+## Cloud sync (optional)
+
+Without an account the app is fully local. Signing in (Settings → Account & sync, or "I already have an account" on the onboarding) with an email one-time code turns on sync and cloud backup through Supabase. Configure `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in `.env.local` (see `.env.example`, restart Metro); without them sync is disabled and the section says so. The server schema is `supabase/migrations/`.
+
+- `src/features/sync/core.ts` holds the pure rules (unit-tested in `tests/sync.test.mts`); `engine.ts` does the I/O.
+- Every local write records the changed records/settings in an outbox (same SQLite transaction on native, same Web Lock on web). Pushes upsert `sync_records`/`sync_meta` (deletes are tombstones); pulls page by `server_updated_at` (with a 60 s overlap) and apply through `parseState`. Last write wins on the client timestamp: a pending local change newer than the cloud copy is kept. Rows that don't validate yet (e.g. a transaction whose account hasn't arrived) are parked and retried.
+- Synced: accounts, categories, transactions, budgets, monthly budgets, recurring rules, goals, and the name, email, currency, number entry and exchange rate. Device-local: appearance, language, app lock, notifications, app icon, automatic backups, last export, onboarding and demo flags.
+- First sign-in: an empty device downloads; an empty cloud receives this device's data; when both have data you choose Merge (union by id, newest change wins), Replace this device, or Cancel. Sample data is never uploaded. A device that synced with another account must be replaced before it syncs with a new one. Signing out keeps or erases this device's copy.
+- Sync runs after sign-in, on launch and foreground, 2 s after local changes, from "Sync now", and in the background task. Receipt photos upload to the private `receipts` bucket (`<user id>/<file>`), download in the background or on view, and are removed when no transaction uses them. Web receipts are page-lifetime blobs, so web doesn't upload them; it shows synced photos through signed URLs.
 
 ## Recurrences and reminders
 
@@ -78,6 +88,7 @@ The tests render the real route tree in `src/app` with `renderRouter` from `expo
 - `categories`: create a category from the budget and transaction pickers.
 - `settings`: switch to Español; an exchange rate gives a combined net worth on Home.
 - `activity`: the FlashList renders rows; search and kind filters work.
+- `sync`: email-code sign-in (wrong code, resend cooldown) uploads local data; "Sync now" pushes and pulls; the merge confirmation. Supabase is replaced by `__tests__/helpers/supabase-mock.ts`.
 
 Test setup lives in `jest.config.js`, `jest.setup.ts` and `__mocks__/`:
 
@@ -109,4 +120,4 @@ Transactions can retain a local date and time. Older entries have no fabricated 
 
 Settings includes a local profile (not an online identity), appearance, Graphite/Chalk launcher icons, decimal or digits-as-cents transaction entry, file-based JSON import/export, and confirmed data replacement. Launcher icon changes require a new development build containing the config plugin and bundled assets. iOS date/time selection uses Expo UI; web/Android use the cross-platform date and time sheets.
 
-Web uses `web.output: "single"`, avoiding the Expo SSR metadata module failure reproduced during development. Serve the exported web app with an SPA fallback for deep links. There is no server-side financial state or API to deploy.
+Web uses `web.output: "single"`, avoiding the Expo SSR metadata module failure reproduced during development. Serve the exported web app with an SPA fallback for deep links. The only server-side state is the optional Supabase sync project.

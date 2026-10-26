@@ -12,7 +12,8 @@ import {
   tap,
   useTheme,
 } from "@/shared/ui";
-import { persistReceipt, receiptsPersist, resolveReceipt } from "./receipts";
+import { persistReceipt, receiptsPersist } from "./receipts";
+import { useReceiptSource } from "@/features/sync/useReceiptSource";
 import { useT } from "@/shared/i18n/react";
 
 const canUseCamera = process.env.EXPO_OS !== "web";
@@ -29,8 +30,12 @@ export function ReceiptField({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [viewing, setViewing] = useState(false);
-  const [broken, setBroken] = useState(false);
-  const source = (value && resolveReceipt(value)) || undefined;
+  // The file version that failed to load (a later download clears it).
+  const [brokenVersion, setBrokenVersion] = useState<number>();
+  // Synced photos missing on this device are fetched on view.
+  const { uri: source, version } = useReceiptSource(value);
+  const broken = brokenVersion === version;
+  const setBroken = (failed: boolean) => setBrokenVersion(failed ? version : undefined);
 
   const choose = async (from: "library" | "camera") => {
     if (busy) return;
@@ -98,6 +103,7 @@ export function ReceiptField({
               <Icon name="image" color={colors.muted} />
             ) : (
               <Image
+                key={version}
                 source={{ uri: source }}
                 style={{ width: 64, height: 64 }}
                 contentFit="cover"

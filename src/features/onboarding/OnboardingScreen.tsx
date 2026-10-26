@@ -46,6 +46,7 @@ import {
   type CategoryDraft,
 } from "./setup";
 import { Group, OptionList, StepHeading, StepProgress } from "./parts";
+import { OnboardingSignIn } from "@/features/sync/OnboardingSignIn";
 
 const STEPS = ["welcome", "currency", "account", "categories"] as const;
 const SETUP_STEPS = STEPS.length - 1;
@@ -464,6 +465,7 @@ export default function OnboardingScreen() {
                 <Txt size={12} color={colors.muted} style={{ textAlign: "center" }}>
                   {t("onboarding.demoHint")}
                 </Txt>
+                <OnboardingSignIn />
               </>
             ) : step === "categories" ? (
               <>

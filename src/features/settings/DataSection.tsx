@@ -12,7 +12,9 @@ import {
   FormError,
   Section,
   Sheet,
+  Txt,
   useFormAction,
+  useTheme,
 } from "@/shared/ui";
 import { SettingsLink } from "./SettingsLink";
 import { useT } from "@/shared/i18n/react";
@@ -20,6 +22,7 @@ import { autoBackupSupported } from "@/features/backup/files";
 import { BackupSettings } from "@/features/backup/BackupSettings";
 import { ExportReminder } from "@/features/backup/ExportReminder";
 import { serializeBackup } from "@/features/backup/policy";
+import { useSyncStatus } from "@/features/sync/status";
 
 type Dialog = "reset" | "demo" | "import" | "restore";
 
@@ -29,6 +32,8 @@ export function DataSection({ onReplaced }: { onReplaced: () => void }) {
   const form = useFormAction();
   const modalForm = useFormAction();
   const { t, locale, mediumDate } = useT();
+  const signedIn = !!useSyncStatus().user;
+  const { colors } = useTheme();
   const confirmWord = t("data.confirmWord");
   const [dialog, setDialog] = useState<Dialog>();
   const [confirmation, setConfirmation] = useState("");
@@ -151,6 +156,11 @@ export function DataSection({ onReplaced }: { onReplaced: () => void }) {
           subtitle={t("data.dialogSubtitle")}
           onClose={() => setDialog(undefined)}
         >
+          {signedIn ? (
+            <Txt size={12} color={colors.muted}>
+              {t("data.signedInHint")}
+            </Txt>
+          ) : null}
           {dialog === "import" && (
             <Field
               label={t("data.paste")}

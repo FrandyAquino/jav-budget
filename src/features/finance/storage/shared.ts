@@ -57,3 +57,45 @@ export async function optimisticUpdate<R>(
     return result;
   }
 }
+
+// Cloud-sync bookkeeping kept next to the ledger (src/features/sync):
+// `outbox` maps changed record/setting keys to the client time of the change;
+// `values` holds small strings (signed-in user id, pull cursor, ...).
+export type SyncLocal = { outbox: Record<string, string>; values: Record<string, string> };
+export type SyncPatch = {
+  clearOutbox?: boolean;
+  outbox?: Record<string, string>;
+  removeOutbox?: string[];
+  // Removes every value before applying `values`.
+  clearValues?: boolean;
+  // null removes the value.
+  values?: Record<string, string | null>;
+};
+// `state` replaces the ledger (validated by the caller, never recorded in the
+// outbox); `patch` updates the sync bookkeeping in the same write.
+export type SyncWork<R> = { state?: FinanceState; patch?: SyncPatch; result: R };
+// record: false writes without adding the change to the outbox (data that came
+// from the cloud, or erasing this device's copy on sign-out).
+export type TransactOptions = { record?: boolean };
+
+export function patchSyncLocal(local: SyncLocal, patch: SyncPatch = {}): SyncLocal {
+  const outbox = patch.clearOutbox ? {} : { ...local.outbox };
+  for (const key of patch.removeOutbox ?? []) delete outbox[key];
+  Object.assign(outbox, patch.outbox);
+  const values = patch.clearValues ? {} : { ...local.values };
+  for (const [key, value] of Object.entries(patch.values ?? {}))
+    if (value === null) delete values[key];
+    else values[key] = value;
+  return { outbox, values };
+}
+// Notified after a local write added entries to the outbox.
+const outboxListeners = new Set<() => void>();
+export function onOutboxChange(listener: () => void) {
+  outboxListeners.add(listener);
+  return () => {
+    outboxListeners.delete(listener);
+  };
+}
+export function notifyOutbox() {
+  for (const listener of outboxListeners) listener();
+}

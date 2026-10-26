@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { router } from "expo-router";
 import { IconButton, Icon, Row, Screen, Txt, useTheme } from "@/shared/ui";
+import { AccountSection } from "./AccountSection";
 import { AppIconSection } from "./AppIconSection";
 import { DataSection } from "./DataSection";
 import { PreferencesSection } from "./PreferencesSection";
@@ -26,6 +27,7 @@ export default function SettingsScreen() {
       }
     >
       <ProfileSection key={profileKey} />
+      <AccountSection onReplaced={() => setProfileKey((k) => k + 1)} />
       <PreferencesSection />
       <AppIconSection />
       <SecuritySection />

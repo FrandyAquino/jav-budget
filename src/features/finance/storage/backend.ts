@@ -14,13 +14,20 @@ import {
 import {
   keepRecoveryCopy,
   LEGACY_KEY,
+  notifyOutbox,
   serialize,
   UnreadableDataError,
   type Listener,
+  type SyncLocal,
+  type SyncPatch,
+  type SyncWork,
+  type TransactOptions,
 } from "./shared";
+import { changesFromDiff } from "@/features/sync/core";
 
 // Native: SQLite tables c_<collection>(id, data, position), meta(key, data) for scalar fields,
-// internal(key, value) for the revision counter and migration marker.
+// internal(key, value) for the revision counter and migration marker, and the
+// cloud-sync bookkeeping: sync_outbox(key, at) plus internal "sync:<name>" values.
 type Db = SQLite.SQLiteDatabase;
 type Cache = { revision: number; snapshot: Snapshot; state: FinanceState | null };
 const table = (key: string) => {
@@ -37,7 +44,8 @@ function open() {
       await db.execAsync(
         `PRAGMA journal_mode = WAL;
         CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY NOT NULL, data TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS internal (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);`,
+        CREATE TABLE IF NOT EXISTS internal (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS sync_outbox (key TEXT PRIMARY KEY NOT NULL, at TEXT NOT NULL);`,
       );
       return db;
     })
@@ -115,12 +123,14 @@ async function apply(db: Db, diff: StateDiff) {
 // diff in one exclusive transaction. `change` must validate its result; returning null skips the write.
 export function transact<R extends FinanceState | null>(
   change: (base: FinanceState | null) => R,
+  options: TransactOptions = {},
 ): Promise<R> {
   return serialize(async () => {
     const db = await open();
     let result!: R;
     let committed: Cache | undefined;
     let wrote = false;
+    let recorded = false;
     await db.withExclusiveTransactionAsync(async (txn) => {
       const revision = Number((await internal(txn, "revision")) ?? 0);
       const current = cache?.revision === revision ? cache : await read(txn, revision);
@@ -149,12 +159,83 @@ export function transact<R extends FinanceState | null>(
       await apply(txn, diff);
       await setInternal(txn, "revision", String(revision + 1));
       if (migrated || !current.state) await setInternal(txn, "migrated", new Date().toISOString());
+      if (options.record !== false) {
+        const keys = changesFromDiff(diff, current.snapshot, current.state, result);
+        if (keys.length) {
+          await patchOutbox(txn, { outbox: Object.fromEntries(keys.map((k) => [k, new Date().toISOString()])) });
+          recorded = true;
+        }
+      }
       committed = { revision: revision + 1, snapshot, state: result };
       wrote = true;
     });
     cache = committed;
     if (result && wrote) for (const listener of listeners) listener(result);
+    if (recorded) notifyOutbox();
     return result;
+  });
+}
+
+async function readSyncLocal(db: Db): Promise<SyncLocal> {
+  const outbox: Record<string, string> = {};
+  for (const row of await db.getAllAsync<{ key: string; at: string }>("SELECT key, at FROM sync_outbox"))
+    outbox[row.key] = row.at;
+  const values: Record<string, string> = {};
+  for (const row of await db.getAllAsync<{ key: string; value: string }>(
+    "SELECT key, value FROM internal WHERE key LIKE 'sync:%'",
+  ))
+    values[row.key.slice(5)] = row.value;
+  return { outbox, values };
+}
+async function patchOutbox(db: Db, patch: SyncPatch) {
+  if (patch.clearOutbox) await db.runAsync("DELETE FROM sync_outbox");
+  for (const key of patch.removeOutbox ?? []) await db.runAsync("DELETE FROM sync_outbox WHERE key = ?", key);
+  const entries = Object.entries(patch.outbox ?? {});
+  if (entries.length) {
+    const statement = await db.prepareAsync(
+      "INSERT INTO sync_outbox (key, at) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET at = excluded.at",
+    );
+    try {
+      for (const [key, at] of entries) await statement.executeAsync(key, at);
+    } finally {
+      await statement.finalizeAsync();
+    }
+  }
+  if (patch.clearValues) await db.runAsync("DELETE FROM internal WHERE key LIKE 'sync:%'");
+  for (const [key, value] of Object.entries(patch.values ?? {}))
+    if (value === null) await db.runAsync("DELETE FROM internal WHERE key = ?", `sync:${key}`);
+    else await setInternal(db, `sync:${key}`, value);
+}
+
+// Reads the ledger and the sync bookkeeping, and writes what `work` returns in
+// one exclusive transaction. A returned state is not added to the outbox.
+// Used by the sync engine only, after the ledger was loaded.
+export function syncTransact<R>(
+  work: (base: FinanceState | null, local: SyncLocal) => SyncWork<R>,
+): Promise<R> {
+  return serialize(async () => {
+    const db = await open();
+    let output!: SyncWork<R>;
+    let committed: Cache | undefined;
+    let wrote = false;
+    await db.withExclusiveTransactionAsync(async (txn) => {
+      const revision = Number((await internal(txn, "revision")) ?? 0);
+      const current = cache?.revision === revision ? cache : await read(txn, revision);
+      const local = await readSyncLocal(txn);
+      output = work(current.state, local);
+      if (output.patch) await patchOutbox(txn, output.patch);
+      committed = current;
+      if (!output.state) return;
+      const { diff, snapshot } = diffState(current.snapshot, output.state);
+      if (isEmptyDiff(diff)) return void (committed = { ...current, state: output.state });
+      await apply(txn, diff);
+      await setInternal(txn, "revision", String(revision + 1));
+      committed = { revision: revision + 1, snapshot, state: output.state };
+      wrote = true;
+    });
+    cache = committed;
+    if (wrote && output.state) for (const listener of listeners) listener(output.state);
+    return output.result;
   });
 }
 // Continues with empty data after an UnreadableDataError: skips the legacy

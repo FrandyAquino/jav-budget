@@ -7,6 +7,7 @@ import { parseState } from "../schema";
 import { syncReminders } from "../device";
 import { transact } from "./backend";
 import { runAutoBackup } from "@/features/backup/files";
+import { backgroundSync } from "@/features/sync/engine";
 
 // Defined at module scope (imported from the root layout) so a background launch can find it.
 export const RECURRING_TASK = "jav-budget:recurring";
@@ -23,6 +24,8 @@ if (!TaskManager.isTaskDefined(RECURRING_TASK))
       // Daily automatic backup (never throws; skipped for demo/unchanged data).
       if (state) await runAutoBackup(state);
       if (state) await syncReminders(state);
+      // Cloud sync when signed in (bounded; never throws).
+      if (state) await backgroundSync();
       return BackgroundTask.BackgroundTaskResult.Success;
     } catch {
       return BackgroundTask.BackgroundTaskResult.Failed;
