@@ -11,7 +11,14 @@ EAS project: `@frandyaquino/jav-budget` (`extra.eas.projectId` in `app.json`). U
 | `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` | EAS secrets | Needed to upload source maps; then remove `SENTRY_DISABLE_AUTO_UPLOAD` from `eas.json`. |
 | Supabase migrations | `supabase/migrations/` | Applied to project `ldhuiyinksudcfpxbuqh` (sync, delete_account). |
 
-Supabase Auth: set the email OTP template and a custom SMTP sender before launch (the built-in sender is rate limited for production).
+Supabase Auth (project `ldhuiyinksudcfpxbuqh`): the OTP is 6 digits and expires in 10 minutes (set October 26). **Sign-in doesn't work for real users yet**: the default templates send a link, not the code, and the free plan only allows editing templates with a custom SMTP sender (the built-in one also sends just 2 emails per hour). Once SMTP is set (Dashboard → Authentication → Emails → SMTP Settings, e.g. Resend), apply the code templates:
+
+```sh
+T=$(security find-generic-password -s "Supabase CLI" -a supabase -w); T=${T#go-keyring-base64:}; T=$(echo "$T" | base64 -d 2>/dev/null || echo "$T")
+curl -X PATCH -H "Authorization: Bearer $T" -H "Content-Type: application/json" \
+  --data @supabase/email/auth-templates.json \
+  https://api.supabase.com/v1/projects/ldhuiyinksudcfpxbuqh/config/auth
+```
 
 ## 2. Builds
 
