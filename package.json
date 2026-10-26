@@ -76,6 +76,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test tests/*.test.mts",
     "test:ui": "jest",
+    "test:it": "SUPABASE_IT=1 jest --config jest.config.js __tests__/integration",
     "test:web-bundle": "node scripts/check-web-bundle.mjs"
   },
   "private": true

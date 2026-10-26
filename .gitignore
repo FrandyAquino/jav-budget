@@ -41,3 +41,6 @@ example
 # generated native folders
 /ios
 /android
+
+# Supabase integration test credentials (npm run test:it)
+__tests__/integration/credentials.local.json
