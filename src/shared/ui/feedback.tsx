@@ -1,6 +1,7 @@
 import { BottomSheet } from "panelui-native/components/bottom-sheet";
-import { useRef, useState, type ReactNode } from "react";
-import { View } from "react-native";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Keyboard, Platform, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Action } from "./buttons";
 import { Icon, Txt } from "./text";
 import { useTheme } from "./theme";
@@ -20,6 +21,13 @@ export function Sheet({
   open?: boolean;
 }) {
   const { colors } = useTheme();
+  // PanelUI's sheet doesn't move for the keyboard. A spacer as tall as the
+  // keyboard (less the sheet's own bottom padding) lifts a short sheet's
+  // content above it; a sheet already at full height keeps its size and its
+  // body insets itself instead (automaticallyAdjustKeyboardInsets, iOS).
+  const keyboard = useKeyboardHeight();
+  const insets = useSafeAreaInsets();
+  const spacer = keyboard ? Math.max(0, keyboard - Math.max(insets.bottom, 16)) : 0;
   return (
     <BottomSheet
       open={open}
@@ -46,13 +54,32 @@ export function Sheet({
         />
         <BottomSheet.Body
           keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
+          // Number pads have no return key: dragging the form closes them.
+          keyboardDismissMode="on-drag"
           contentContainerStyle={{ padding: 24, gap: 18, paddingBottom: 42 }}
         >
           {children}
         </BottomSheet.Body>
+        {Platform.OS === "ios" ? <View style={{ height: spacer }} /> : null}
       </BottomSheet.Content>
     </BottomSheet>
   );
+}
+// Height of the on-screen keyboard on iOS (0 when hidden). Android resizes the
+// window for the keyboard, so there it stays 0.
+function useKeyboardHeight() {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    if (Platform.OS !== "ios") return;
+    const show = Keyboard.addListener("keyboardWillShow", (e) => setHeight(e.endCoordinates.height));
+    const hide = Keyboard.addListener("keyboardWillHide", () => setHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  return height;
 }
 export function FormError({ message }: { message: string }) {
   const { colors } = useTheme();

@@ -31,9 +31,10 @@ export function BudgetRow({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={t("budgets.editA11y", {
+      // The card's texts aren't read on their own: say what kind of budget it is.
+      accessibilityLabel={`${t("budgets.editA11y", {
         name: category?.name ?? t("budgets.categoryFallback"),
-      })}
+      })}, ${t(budget.rollover ? "budgets.rollsOver" : "budgets.monthlyLimit")}`}
       accessibilityHint={
         status.over
           ? t("budgets.overAmount", {

@@ -6,6 +6,9 @@ includeTags:
   - core
 executionOrder:
   continueOnFailure: true
+# disableAnimations only covers UIKit; flows also waitForAnimationToEnd after
+# each tap because Reanimated sheets keep moving, and a short drag after typing in
+# forms because Maestro treats fields under the keyboard as visible.
 platform:
   ios:
     disableAnimations: true

@@ -2,6 +2,9 @@ import { fireEvent, screen } from "expo-router/testing-library";
 import { shiftMonth } from "@/features/finance/model";
 import { en, enI18n, fixture, fmt, MONTH, renderApp, stored } from "./helpers/app";
 
+// Budget cards read "Edit <name> budget, <kind of budget>".
+const budgetRow = (name: string) => new RegExp(`^${en("budgets.editA11y", { name })}, `);
+
 const LAST_MONTH = shiftMonth(MONTH, -1);
 const SPENT = 45_000 + 120_000; // fixture expenses this month
 
@@ -21,7 +24,7 @@ test("creating a category budget with rollover enabled", async () => {
   expect(rollover).toBeChecked();
   await user.press(screen.getByRole("button", { name: en("budgetForm.save") }));
 
-  expect(await screen.findByRole("button", { name: en("budgets.editA11y", { name: "Groceries" }) })).toBeOnTheScreen();
+  expect(await screen.findByRole("button", { name: budgetRow("Groceries") })).toBeOnTheScreen();
   expect((await stored()).budgets).toEqual([
     expect.objectContaining({ categoryId: "groceries", month: MONTH, currency: "DOP", limit: 300_000, rollover: true }),
   ]);
@@ -39,8 +42,8 @@ test("copy from last month brings over last month's budgets", async () => {
   await user.press(await screen.findByRole("button", { name: en("budgets.copyFrom", { month }) }));
 
   expect(await screen.findByText(en("budgets.copied", { count: 2, month }))).toBeOnTheScreen();
-  expect(screen.getByRole("button", { name: en("budgets.editA11y", { name: "Groceries" }) })).toBeOnTheScreen();
-  expect(screen.getByRole("button", { name: en("budgets.editA11y", { name: "Rent" }) })).toBeOnTheScreen();
+  expect(screen.getByRole("button", { name: budgetRow("Groceries") })).toBeOnTheScreen();
+  expect(screen.getByRole("button", { name: budgetRow("Rent") })).toBeOnTheScreen();
   const copied = (await stored()).budgets.filter((b) => b.month === MONTH);
   expect(copied).toEqual(
     expect.arrayContaining([

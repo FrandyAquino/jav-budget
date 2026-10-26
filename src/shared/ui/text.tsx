@@ -57,6 +57,9 @@ export function Icon({
       }
       size={size}
       color={color ?? colors.text}
+      // Decorative: keeps the icon font's glyph out of screen reader labels.
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
     />
   );
 }

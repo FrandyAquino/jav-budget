@@ -1,6 +1,9 @@
 import { screen } from "expo-router/testing-library";
 import { en, renderApp, stored } from "./helpers/app";
 
+// Budget cards read "Edit <name> budget, <kind of budget>".
+const budgetRow = (name: string) => new RegExp(`^${en("budgets.editA11y", { name })}, `);
+
 const categorySelect = (value: string) =>
   ({ name: en("common.selectValue", { label: en("txForm.category"), value }) });
 
@@ -21,7 +24,7 @@ test("a category created from the budget form picker is selected and saved", asy
 
   await user.type(screen.getByLabelText(en("budgetForm.limitA11y")), "1500");
   await user.press(screen.getByRole("button", { name: en("budgetForm.save") }));
-  expect(await screen.findByRole("button", { name: en("budgets.editA11y", { name: "Pet care" }) })).toBeOnTheScreen();
+  expect(await screen.findByRole("button", { name: budgetRow("Pet care") })).toBeOnTheScreen();
   expect((await stored()).budgets).toEqual([expect.objectContaining({ categoryId: created!.id, limit: 150_000 })]);
 });
 

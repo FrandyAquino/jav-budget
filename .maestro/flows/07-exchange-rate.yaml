@@ -7,11 +7,19 @@ tags:
 - runFlow: ../subflows/launch-fresh.yaml
 - assertVisible: "TOTAL BALANCE"
 - tapOn: "Set an exchange rate in Settings to combine your currencies"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element: "Exchange rate, Not set"
 - tapOn: "Exchange rate, Not set"
+- waitForAnimationToEnd
 - tapOn: "Dominican pesos per US dollar"
+- waitForAnimationToEnd
 - inputText: "60"
 - tapOn: "Save rate"
 - assertVisible: "Exchange rate saved"
+- scrollUntilVisible:
+    element: "Close settings"
+    direction: UP
 - tapOn: "Close settings"
 - assertVisible: "NET WORTH"
 - assertVisible: "at RD\\$60\\.00 / US\\$1.*"

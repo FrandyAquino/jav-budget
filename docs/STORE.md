@@ -73,4 +73,5 @@ Sign-in uses email codes, so a reviewer can't use a fixed password. Either rely 
 
 - iPhone 6.9" screenshots (1320×2868), 3–10 per language; iPad isn't supported (`supportsTablet` not set).
 - Play: 2–8 phone screenshots, feature graphic 1024×500, icon 512×512 (downscale `assets/icons/graphite.png`, 1024×1024).
-- Privacy policy URL (`docs/PRIVACY.md` hosted) and support URL.
+- Privacy policy URL: https://github.com/FrandyAquino/jav-budget/blob/main/docs/PRIVACY.md · Support URL: https://github.com/FrandyAquino/jav-budget/issues
+- Screenshots: on an iPhone 18 Pro Max simulator (6.9", 1320×2868) with a Release build, `xcrun simctl status_bar booted override --time 9:41 --batteryState charged --batteryLevel 100`, then `maestro test .maestro/screenshots/store.yaml --test-output-dir store-shots` (EN and ES, five screens each; `store-shots/` is gitignored).

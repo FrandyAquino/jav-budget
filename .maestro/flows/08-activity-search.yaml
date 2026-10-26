@@ -6,11 +6,18 @@ tags:
 ---
 - runFlow: ../subflows/launch-fresh.yaml
 - tapOn: "Activity"
-- assertVisible: "Weekend coffee"
+- waitForAnimationToEnd
+# Rows read "Edit <title>, <amount>"; the demo dates move with today.
+- scrollUntilVisible:
+    element: "Edit Weekend coffee.*"
+- scrollUntilVisible:
+    element: "Search transactions"
+    direction: UP
 - tapOn: "Search transactions"
+- waitForAnimationToEnd
 - inputText: "Uber"
-- assertVisible: "Uber ride"
-- assertNotVisible: "Weekend coffee"
+- assertVisible: "Edit Uber ride.*"
+- assertNotVisible: "Edit Weekend coffee.*"
 - eraseText: 10
 - inputText: "zzz no match"
 - assertVisible: "Nothing here just yet"

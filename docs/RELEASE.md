@@ -40,11 +40,11 @@ iOS needs an Apple Developer account; the first build creates certificates and p
 - [ ] Airplane mode: everything works; sync resumes when back online.
 - [ ] OTA: `npx eas-cli@latest update --channel preview --message "QA"` reaches the preview build after two restarts.
 
-End-to-end flows: `maestro test .maestro/` on an iOS simulator with a dev build. The flows match English text and work on an Android emulator too once Android tooling is installed.
+End-to-end flows: `maestro test .maestro/` on an iOS simulator with a Release build (`npx expo run:ios --configuration Release`; a dev client shows its launcher after `clearState`). Needs Java (`brew install openjdk`, `JAVA_HOME=/opt/homebrew/opt/openjdk`). All 8 flows passed on October 26, 2026 (iPhone 18 Pro Max, iOS 27.1). They match English text.
 
 ## 4. Store
 
-Copy, privacy answers and review notes: `docs/STORE.md`. Privacy policy: `docs/PRIVACY.md` (host it and fill in the contact email).
+Copy, privacy answers and review notes: `docs/STORE.md`. Privacy policy: `docs/PRIVACY.md`, public at https://github.com/FrandyAquino/jav-budget/blob/main/docs/PRIVACY.md (contact: GitHub issues).
 
 ## Known limits
 

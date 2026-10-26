@@ -6,16 +6,48 @@ tags:
 ---
 - runFlow: ../subflows/launch-fresh.yaml
 - tapOn: "Add"
+- waitForAnimationToEnd
 - tapOn: "Amount"
+- waitForAnimationToEnd
 - inputText: "1000"
-- tapOn: "Description"
+# A short drag closes the keyboard (number pads have no return key).
+- swipe:
+    start: 50%, 50%
+    end: 50%, 42%
+    duration: 400
+- waitForAnimationToEnd
+# The field's label and the input share this name; index 1 is the input.
+- tapOn:
+    text: "Description"
+    index: 1
+- waitForAnimationToEnd
 - inputText: "Maestro split"
+# A short drag closes the keyboard (number pads have no return key).
+- swipe:
+    start: 50%, 50%
+    end: 50%, 42%
+    duration: 400
+- waitForAnimationToEnd
 - tapOn: "Split"
 - assertVisible: "Remaining to allocate · .*"
 - tapOn: "Amount for part 1"
+- waitForAnimationToEnd
 - inputText: "600"
+# A short drag closes the keyboard (number pads have no return key).
+- swipe:
+    start: 50%, 50%
+    end: 50%, 42%
+    duration: 400
+- waitForAnimationToEnd
 - tapOn: "Amount for part 2"
+- waitForAnimationToEnd
 - inputText: "500"
+# A short drag closes the keyboard (number pads have no return key).
+- swipe:
+    start: 50%, 50%
+    end: 50%, 42%
+    duration: 400
+- waitForAnimationToEnd
 - assertVisible: "Over by .*"
 - scrollUntilVisible:
     element: "Save transaction"
@@ -25,8 +57,15 @@ tags:
     element: "Amount for part 2"
     direction: UP
 - tapOn: "Amount for part 2"
+- waitForAnimationToEnd
 - eraseText: 10
 - inputText: "400"
+# A short drag closes the keyboard (number pads have no return key).
+- swipe:
+    start: 50%, 50%
+    end: 50%, 42%
+    duration: 400
+- waitForAnimationToEnd
 - assertVisible: "Fully allocated"
 - scrollUntilVisible:
     element: "Save transaction"

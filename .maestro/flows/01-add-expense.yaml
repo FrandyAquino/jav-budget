@@ -6,19 +6,46 @@ tags:
 ---
 - runFlow: ../subflows/launch-fresh.yaml
 - tapOn: "Add"
+- waitForAnimationToEnd
 - tapOn: "Amount"
+- waitForAnimationToEnd
 - inputText: "1234.56"
-- tapOn: "Description"
+# A short drag closes the keyboard (number pads have no return key).
+- swipe:
+    start: 50%, 50%
+    end: 50%, 42%
+    duration: 400
+- waitForAnimationToEnd
+# The field's label and the input share this name; index 1 is the input.
+- tapOn:
+    text: "Description"
+    index: 1
+- waitForAnimationToEnd
 - inputText: "Maestro groceries"
+# A short drag closes the keyboard (number pads have no return key).
+- swipe:
+    start: 50%, 50%
+    end: 50%, 42%
+    duration: 400
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element: "Save transaction"
 - tapOn: "Save transaction"
 - assertVisible: "Transaction added"
 # The form returns to Home, whose recent activity now lists the entry.
 - assertVisible: "TOTAL BALANCE"
-- assertVisible: "Maestro groceries"
+- scrollUntilVisible:
+    element: ".*Maestro groceries.*"
 - tapOn: "Activity"
+- waitForAnimationToEnd
 - tapOn: "Search transactions"
+- waitForAnimationToEnd
 - inputText: "Maestro groceries"
+# A short drag closes the keyboard (number pads have no return key).
+- swipe:
+    start: 50%, 50%
+    end: 50%, 42%
+    duration: 400
+- waitForAnimationToEnd
 - assertVisible: "1 transaction"
 - assertVisible: "Edit Maestro groceries.*1,234\\.56.*"

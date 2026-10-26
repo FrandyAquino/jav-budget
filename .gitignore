@@ -44,3 +44,6 @@ example
 
 # Supabase integration test credentials (npm run test:it)
 __tests__/integration/credentials.local.json
+
+# Maestro store screenshots (.maestro/screenshots/store.yaml)
+store-shots/

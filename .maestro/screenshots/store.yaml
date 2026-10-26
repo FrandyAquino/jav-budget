@@ -1,0 +1,53 @@
+# App Store / Play screenshots from the labeled sample data, in English then
+# Spanish. Not part of `maestro test .maestro/` (lives outside flows/).
+#   maestro test .maestro/screenshots/store.yaml --test-output-dir store-shots
+# Use an iPhone 6.9" simulator (e.g. iPhone 18 Pro Max) with a Release build.
+appId: com.frandyaquino.javbudget
+---
+- runFlow: ../subflows/launch-fresh.yaml
+- takeScreenshot: en-1-home
+- tapOn: "Activity"
+- waitForAnimationToEnd
+- takeScreenshot: en-2-activity
+- tapOn: "Budgets"
+- waitForAnimationToEnd
+- takeScreenshot: en-3-budgets
+- tapOn: "Insights"
+- waitForAnimationToEnd
+- takeScreenshot: en-4-insights
+- tapOn: "Add"
+- waitForAnimationToEnd
+- takeScreenshot: en-5-add
+- tapOn: "Close"
+- waitForAnimationToEnd
+- tapOn: "Home"
+- waitForAnimationToEnd
+- tapOn: "Set an exchange rate in Settings to combine your currencies"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element: "Language: .*"
+- tapOn: "Language: .*"
+- waitForAnimationToEnd
+- tapOn: "Español"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element: "Cerrar ajustes"
+    direction: UP
+- tapOn: "Cerrar ajustes"
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "Inicio"
+    timeout: 10000
+- takeScreenshot: es-1-home
+- tapOn: "Actividad"
+- waitForAnimationToEnd
+- takeScreenshot: es-2-activity
+- tapOn: "Presupuestos"
+- waitForAnimationToEnd
+- takeScreenshot: es-3-budgets
+- tapOn: "Análisis"
+- waitForAnimationToEnd
+- takeScreenshot: es-4-insights
+- tapOn: "Añadir"
+- waitForAnimationToEnd
+- takeScreenshot: es-5-add

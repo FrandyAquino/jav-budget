@@ -6,36 +6,60 @@ tags:
 ---
 - runFlow: ../subflows/launch-fresh.yaml
 - tapOn: "Budgets"
+- waitForAnimationToEnd
 # Category budget with rollover (sample data has no Health budget).
 - tapOn: "Create budget"
 - assertVisible: "A new monthly budget"
 - tapOn: "Category: .*"
+- waitForAnimationToEnd
 - tapOn: "Health"
+- waitForAnimationToEnd
 - tapOn: "Budget limit"
+- waitForAnimationToEnd
 - inputText: "2500"
+# A short drag closes the keyboard (number pads have no return key).
+- swipe:
+    start: 50%, 50%
+    end: 50%, 42%
+    duration: 400
+- waitForAnimationToEnd
 # The row label and the Switch share this text; index 1 is the Switch.
 - tapOn:
     text: "Roll over unused amount"
     index: 1
+- waitForAnimationToEnd
 - tapOn: "Save budget"
 - assertVisible: "Budget saved"
 - scrollUntilVisible:
-    element: "Edit Health budget"
-- assertVisible: "Monthly limit · rolls over"
+    element: "Edit Health budget, Monthly limit · rolls over"
 # Overall monthly budget card.
 - scrollUntilVisible:
     element: "Set a monthly budget"
     direction: UP
+    centerElement: true
 - tapOn: "Set a monthly budget"
+- waitForAnimationToEnd
 - tapOn: "Monthly budget limit"
+- waitForAnimationToEnd
 - eraseText: 20
 - inputText: "100000"
+# A short drag closes the keyboard (number pads have no return key).
+- swipe:
+    start: 50%, 50%
+    end: 50%, 42%
+    duration: 400
+- waitForAnimationToEnd
 - tapOn: "Save monthly budget"
 - assertVisible: "Monthly budget saved"
 - assertVisible: "LEFT THIS MONTH"
 # Next month is empty: copy this month's budgets into it.
 - tapOn: "Next month"
 - assertVisible: "A fresh month, a fresh plan"
+# The button sits by the tab bar: bring it to the middle first.
+- scrollUntilVisible:
+    element: "Copy from .*"
+    centerElement: true
 - tapOn: "Copy from .*"
 - assertVisible: "Copied .* budgets from .*"
-- assertVisible: "Edit Health budget"
+- scrollUntilVisible:
+    element: "Edit Health budget, .*"

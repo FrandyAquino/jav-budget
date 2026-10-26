@@ -6,16 +6,37 @@ tags:
 ---
 - runFlow: ../subflows/launch-fresh.yaml
 - tapOn: "Budgets"
+- waitForAnimationToEnd
 - tapOn: "Create budget"
+- waitForAnimationToEnd
 - tapOn: "Category: .*"
+- waitForAnimationToEnd
 - tapOn: "Create category"
 - assertVisible: "New category"
-- tapOn: "Category name"
+# The field's label and the input share this name; index 1 is the input.
+- tapOn:
+    text: "Category name"
+    index: 1
+- waitForAnimationToEnd
 - inputText: "Maestro pets"
+# A short drag closes the keyboard (number pads have no return key).
+- swipe:
+    start: 50%, 50%
+    end: 50%, 42%
+    duration: 400
+- waitForAnimationToEnd
 - tapOn: "Save category"
 - assertVisible: "Category: Maestro pets"
 - tapOn: "Budget limit"
+- waitForAnimationToEnd
 - inputText: "1500"
+# A short drag closes the keyboard (number pads have no return key).
+- swipe:
+    start: 50%, 50%
+    end: 50%, 42%
+    duration: 400
+- waitForAnimationToEnd
 - tapOn: "Save budget"
+- waitForAnimationToEnd
 - scrollUntilVisible:
-    element: "Edit Maestro pets budget"
+    element: "Edit Maestro pets budget, .*"

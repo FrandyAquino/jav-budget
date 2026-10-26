@@ -6,16 +6,28 @@ tags:
 ---
 - runFlow: ../subflows/launch-fresh.yaml
 - tapOn: "Activity"
+- waitForAnimationToEnd
 - tapOn: "Search transactions"
+- waitForAnimationToEnd
 - inputText: "Weekend"
 - assertVisible: "1 transaction"
 - tapOn:
     text: "Edit Weekend coffee.*"
     index: 0
 - assertVisible: "Edit transaction"
-- tapOn: "Description"
+# The field's label and the input share this name; index 1 is the input.
+- tapOn:
+    text: "Description"
+    index: 1
+- waitForAnimationToEnd
 - eraseText: 40
 - inputText: "Weekend espresso"
+# A short drag closes the keyboard (number pads have no return key).
+- swipe:
+    start: 50%, 50%
+    end: 50%, 42%
+    duration: 400
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element: "Save changes"
 - tapOn: "Save changes"
@@ -27,6 +39,7 @@ tags:
 - tapOn:
     text: "Edit Weekend espresso.*"
     index: 0
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element: "Duplicate for today"
 - tapOn: "Duplicate for today"

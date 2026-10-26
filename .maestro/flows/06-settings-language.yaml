@@ -8,9 +8,15 @@ tags:
 # The sample data holds DOP and USD, so Home offers a shortcut to Settings.
 - tapOn: "Set an exchange rate in Settings to combine your currencies"
 - assertVisible: "Settings"
+- scrollUntilVisible:
+    element: "Language: .*"
 - tapOn: "Language: .*"
+- waitForAnimationToEnd
 - tapOn: "Español"
-- assertVisible: "Ajustes"
 - assertVisible: "Preferencias"
+- scrollUntilVisible:
+    element: "Cerrar ajustes"
+    direction: UP
+- assertVisible: "Ajustes"
 - tapOn: "Cerrar ajustes"
 - assertVisible: "Inicio"

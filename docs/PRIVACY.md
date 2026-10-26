@@ -2,7 +2,7 @@
 
 _Last updated / Última actualización: October 26, 2026_
 
-> Before publishing: replace `<CONTACT_EMAIL>` and host this page at a public URL (App Store Connect and Google Play both require one).
+> Public URL for the stores: https://github.com/FrandyAquino/jav-budget/blob/main/docs/PRIVACY.md
 
 ## English
 
@@ -40,7 +40,7 @@ The app is not directed to children under 13.
 
 ### Contact
 
-Questions or requests: `<CONTACT_EMAIL>`.
+Questions or requests: open an issue at https://github.com/FrandyAquino/jav-budget/issues.
 
 ## Español
 
@@ -78,4 +78,4 @@ La app no está dirigida a menores de 13 años.
 
 ### Contacto
 
-Preguntas o solicitudes: `<CONTACT_EMAIL>`.
+Preguntas o solicitudes: abre un issue en https://github.com/FrandyAquino/jav-budget/issues.
