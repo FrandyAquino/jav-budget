@@ -2,10 +2,10 @@ import { useState } from "react";
 import { Action, Card, Section, Sheet, Txt, useTheme } from "@/shared/ui";
 import { useT } from "@/shared/i18n/react";
 import { useFinance } from "@/features/finance/store";
-import { requestSync, signOut } from "@/features/sync/engine";
+import { deleteAccount, requestSync, signOut } from "@/features/sync/engine";
 import { SignInForm } from "@/features/sync/SignInForm";
 import { SyncDecisionSheet } from "@/features/sync/SyncDecisionSheet";
-import { useSyncStatus } from "@/features/sync/status";
+import { useSyncStatus, type SyncErrorCode } from "@/features/sync/status";
 
 // Optional account: signing in turns on cloud sync and cloud backup.
 export function AccountSection({ onReplaced }: { onReplaced: () => void }) {
@@ -16,6 +16,8 @@ export function AccountSection({ onReplaced }: { onReplaced: () => void }) {
   const [deciding, setDeciding] = useState(true);
   const [signingOut, setSigningOut] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<SyncErrorCode | null>(null);
   const header = <Section title={t("account.title")} subtitle={t("account.subtitle")} />;
   if (!status.configured)
     return (
@@ -86,6 +88,9 @@ export function AccountSection({ onReplaced }: { onReplaced: () => void }) {
         <Action secondary onPress={() => setSigningOut(true)}>
           {t("account.signOut")}
         </Action>
+        <Action secondary onPress={() => setDeleting(true)}>
+          {t("account.delete")}
+        </Action>
         <Txt size={12} color={colors.muted}>
           {t("account.privacy")}
         </Txt>
@@ -131,6 +136,52 @@ export function AccountSection({ onReplaced }: { onReplaced: () => void }) {
             {t("sync.signOut.erase")}
           </Action>
           <Action secondary disabled={busy} onPress={() => setSigningOut(false)}>
+            {t("common.cancel")}
+          </Action>
+        </Sheet>
+      ) : null}
+      {deleting ? (
+        <Sheet
+          title={t("account.delete.title")}
+          subtitle={t("account.delete.body")}
+          onClose={() => {
+            if (busy) return;
+            setDeleting(false);
+            setDeleteError(null);
+          }}
+        >
+          {deleteError ? (
+            <Txt size={13} color={colors.danger} accessibilityLiveRegion="polite">
+              {t(`account.error.${deleteError}`)}
+            </Txt>
+          ) : null}
+          {(["keep", "erase"] as const).map((mode) => (
+            <Action
+              key={mode}
+              danger
+              disabled={busy}
+              onPress={() => {
+                setBusy(true);
+                setDeleteError(null);
+                void deleteAccount(mode).then((error) => {
+                  setBusy(false);
+                  if (error) return setDeleteError(error);
+                  setDeleting(false);
+                  if (mode === "erase") onReplaced();
+                });
+              }}
+            >
+              {t(mode === "keep" ? "account.delete.keep" : "account.delete.erase")}
+            </Action>
+          ))}
+          <Action
+            secondary
+            disabled={busy}
+            onPress={() => {
+              setDeleting(false);
+              setDeleteError(null);
+            }}
+          >
             {t("common.cancel")}
           </Action>
         </Sheet>

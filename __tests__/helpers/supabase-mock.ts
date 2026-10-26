@@ -14,12 +14,15 @@ const stamp = () => new Date(Date.UTC(2026, 9, 25, 10, 0, 0, ++clock)).toISOStri
 export const server = {
   session: null as typeof SESSION | null,
   tables: { sync_records: new Map<string, Row>(), sync_meta: new Map<string, Row>() },
+  receipts: new Set<string>(), // "<user id>/<file>"
   listeners: new Set<Listener>(),
   reset() {
     this.session = null;
     this.tables.sync_records.clear();
     this.tables.sync_meta.clear();
+    this.receipts.clear();
     this.listeners.clear();
+    client.rpc.mockClear();
     for (const fn of Object.values(auth)) if (typeof fn === "function" && "mockClear" in fn) (fn as jest.Mock).mockClear();
   },
   signIn() {
@@ -115,11 +118,31 @@ export const client = {
       return { error: null };
     }),
   }),
+  // delete_account: the user's rows cascade.
+  rpc: jest.fn(async (name: string) => {
+    if (name !== "delete_account" || !server.session) return { data: null, error: { message: "Not allowed", status: 401 } };
+    for (const map of Object.values(server.tables))
+      for (const [key, row] of map) if (row.user_id === USER.id) map.delete(key);
+    return { data: null, error: null };
+  }),
   storage: {
     from: () => ({
-      upload: jest.fn(async () => ({ data: {}, error: null })),
+      upload: jest.fn(async (path: string) => {
+        server.receipts.add(path);
+        return { data: {}, error: null };
+      }),
       createSignedUrl: jest.fn(async () => ({ data: null, error: { message: "Not found" } })),
-      remove: jest.fn(async () => ({ data: [], error: null })),
+      list: jest.fn(async (folder: string, options?: { limit?: number }) => ({
+        data: [...server.receipts]
+          .filter((path) => path.startsWith(`${folder}/`))
+          .slice(0, options?.limit ?? 100)
+          .map((path) => ({ name: path.slice(folder.length + 1) })),
+        error: null,
+      })),
+      remove: jest.fn(async (paths: string[]) => {
+        const removed = paths.filter((path) => server.receipts.delete(path));
+        return { data: removed.map((name) => ({ name })), error: null };
+      }),
     }),
   },
 };

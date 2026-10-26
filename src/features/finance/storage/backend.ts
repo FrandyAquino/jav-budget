@@ -1,4 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Crypto from "expo-crypto";
+import * as SecureStore from "expo-secure-store";
 import * as SQLite from "expo-sqlite";
 import type { FinanceState } from "../model";
 import { parseState } from "../schema";
@@ -38,21 +40,123 @@ let opening: Promise<Db> | undefined;
 let cache: Cache | undefined;
 const listeners = new Set<Listener>();
 
-function open() {
-  opening ??= SQLite.openDatabaseAsync("jav-budget.db")
-    .then(async (db) => {
-      await db.execAsync(
-        `PRAGMA journal_mode = WAL;
-        CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY NOT NULL, data TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS internal (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS sync_outbox (key TEXT PRIMARY KEY NOT NULL, at TEXT NOT NULL);`,
-      );
-      return db;
-    })
-    .catch((error: unknown) => {
-      opening = undefined;
+// The ledger file is encrypted with SQLCipher using a random 256-bit key kept
+// in the iOS keychain / Android keystore. A build without SQLCipher (Expo Go)
+// keeps using the older unencrypted file.
+const PLAIN_DB = "jav-budget.db";
+const SECURE_DB = "jav-budget-secure.db";
+const KEY_ITEM = "jav-budget.db-key";
+// AFTER_FIRST_UNLOCK: the background task runs while the device is locked, and
+// the key follows an encrypted device backup together with the file.
+const KEY_OPTIONS = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK };
+const SCHEMA = `PRAGMA journal_mode = WAL;
+  CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY NOT NULL, data TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS internal (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS sync_outbox (key TEXT PRIMARY KEY NOT NULL, at TEXT NOT NULL);`;
+// Set when the encrypted file can't be opened with this device's key (e.g. a
+// backup restored without its keychain item); discardUnreadableData() resets it.
+let lockedOut = false;
+// Set once the encrypted file is open. Every connection needs it, including the
+// separate one each exclusive transaction uses.
+let databaseName = PLAIN_DB;
+let keyPragma = "";
+
+// Same as db.withExclusiveTransactionAsync(), whose new connection would skip
+// the key and read/write the file unencrypted.
+async function exclusive(task: (txn: Db) => Promise<void>) {
+  const txn = await SQLite.openDatabaseAsync(databaseName, { useNewConnection: true });
+  try {
+    if (keyPragma) await txn.execAsync(keyPragma);
+    await txn.execAsync("BEGIN");
+    try {
+      await task(txn);
+      await txn.execAsync("COMMIT");
+    } catch (error) {
+      await txn.execAsync("ROLLBACK").catch(() => {});
       throw error;
+    }
+  } finally {
+    await txn.closeAsync();
+  }
+}
+
+async function databaseKey() {
+  const stored = await SecureStore.getItemAsync(KEY_ITEM, KEY_OPTIONS);
+  if (stored) return { key: stored, created: false };
+  const key = Array.from(Crypto.getRandomBytes(32), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  await SecureStore.setItemAsync(KEY_ITEM, key, KEY_OPTIONS);
+  return { key, created: true };
+}
+
+// One-time move of the unencrypted file's tables into the new encrypted one, in
+// one transaction; the old file is deleted once the copy is committed.
+async function copyPlainDatabase() {
+  const plain = await SQLite.openDatabaseAsync(PLAIN_DB);
+  try {
+    const tables = await plain.getAllAsync<{ name: string; sql: string }>(
+      "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'",
+    );
+    await exclusive(async (txn) => {
+      for (const { name, sql } of tables) {
+        await txn.execAsync(sql);
+        const rows = await plain.getAllAsync<Record<string, SQLite.SQLiteBindValue>>(`SELECT * FROM "${name}"`);
+        if (!rows.length) continue;
+        const columns = Object.keys(rows[0]);
+        const statement = await txn.prepareAsync(
+          `INSERT INTO "${name}" (${columns.map((c) => `"${c}"`).join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`,
+        );
+        try {
+          for (const row of rows) await statement.executeAsync(columns.map((c) => row[c]));
+        } finally {
+          await statement.finalizeAsync();
+        }
+      }
+      await txn.execAsync(SCHEMA.replace("PRAGMA journal_mode = WAL;", ""));
+      await setInternal(txn, "encrypted", new Date().toISOString());
     });
+  } finally {
+    await plain.closeAsync();
+  }
+}
+
+async function openSecure(): Promise<Db> {
+  const db = await SQLite.openDatabaseAsync(SECURE_DB);
+  if (!(await db.getFirstAsync("PRAGMA cipher_version"))) {
+    await db.closeAsync();
+    await SQLite.deleteDatabaseAsync(SECURE_DB).catch(() => {});
+    const plain = await SQLite.openDatabaseAsync(PLAIN_DB);
+    await plain.execAsync(SCHEMA);
+    databaseName = PLAIN_DB;
+    keyPragma = "";
+    return plain;
+  }
+  const { key, created } = await databaseKey();
+  const pragma = `PRAGMA key = "x'${key}'"`;
+  await db.execAsync(pragma);
+  try {
+    await db.getFirstAsync("SELECT count(*) FROM sqlite_master");
+  } catch (error) {
+    await db.closeAsync();
+    if (!created) throw error;
+    lockedOut = true;
+    throw new UnreadableDataError("The encrypted data on this device can't be opened with its key.");
+  }
+  databaseName = SECURE_DB;
+  keyPragma = pragma;
+  // A new encrypted file has no tables yet (the copy creates them with its marker).
+  if (!(await db.getFirstAsync("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'internal'")))
+    await copyPlainDatabase();
+  await db.execAsync(SCHEMA);
+  // Retried on every launch; fails quietly once the file is gone.
+  void SQLite.deleteDatabaseAsync(PLAIN_DB).catch(() => {});
+  return db;
+}
+
+function open() {
+  opening ??= openSecure().catch((error: unknown) => {
+    opening = undefined;
+    throw error;
+  });
   return opening;
 }
 const internal = (db: Db, key: string) =>
@@ -126,12 +230,12 @@ export function transact<R extends FinanceState | null>(
   options: TransactOptions = {},
 ): Promise<R> {
   return serialize(async () => {
-    const db = await open();
+    await open();
     let result!: R;
     let committed: Cache | undefined;
     let wrote = false;
     let recorded = false;
-    await db.withExclusiveTransactionAsync(async (txn) => {
+    await exclusive(async (txn) => {
       const revision = Number((await internal(txn, "revision")) ?? 0);
       const current = cache?.revision === revision ? cache : await read(txn, revision);
       let base = current.state;
@@ -214,11 +318,11 @@ export function syncTransact<R>(
   work: (base: FinanceState | null, local: SyncLocal) => SyncWork<R>,
 ): Promise<R> {
   return serialize(async () => {
-    const db = await open();
+    await open();
     let output!: SyncWork<R>;
     let committed: Cache | undefined;
     let wrote = false;
-    await db.withExclusiveTransactionAsync(async (txn) => {
+    await exclusive(async (txn) => {
       const revision = Number((await internal(txn, "revision")) ?? 0);
       const current = cache?.revision === revision ? cache : await read(txn, revision);
       const local = await readSyncLocal(txn);
@@ -242,6 +346,11 @@ export function syncTransact<R>(
 // migration from now on. The legacy value and its recovery copy are kept.
 export function discardUnreadableData(): Promise<void> {
   return serialize(async () => {
+    if (lockedOut) {
+      // Unreadable without its key: replace it with an empty encrypted file.
+      await SQLite.deleteDatabaseAsync(SECURE_DB);
+      lockedOut = false;
+    }
     const db = await open();
     if (await internal(db, "migrated")) return;
     await setInternal(db, "migrated", `skipped-unreadable:${new Date().toISOString()}`);

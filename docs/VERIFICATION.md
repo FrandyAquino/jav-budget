@@ -25,7 +25,7 @@
 - Physical iOS/Android QA: authentication, notification permissions/delivery, swipe gestures, haptics, keyboard interaction, accessibility, and small-screen layouts.
 - Signed development/release builds and store assets. Graphite/Chalk app icons were added October 23; device verification remains pending.
 - Dependency audit: npm reports 21 high-severity affected dependency nodes, traced to `braces <=3.0.3` (GHSA-vfj7-8cjw-p6xm) and `node-forge <=1.4.0` (GHSA-86w9-cpqp-85rv) in the Expo/Metro toolchain. npm's proposed force fix downgrades Expo to SDK 44 and was not applied. Reassess when compatible upstream fixes are available; this is not a clean security-audit result.
-- No cloud backup or encrypted local database. The app lock protects the interface only.
+- ~~No cloud backup or encrypted local database.~~ Cloud sync (October 25) and the SQLCipher-encrypted ledger (October 26) address this; see `docs/RELEASE.md`.
 - Recurrences catch up when the app runs; no guarantee of execution while the OS has terminated it. Reminders schedule the next occurrence, not an unlimited future series.
 
 ## Customization update — October 23, 2026

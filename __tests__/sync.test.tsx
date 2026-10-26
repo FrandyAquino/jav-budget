@@ -122,3 +122,31 @@ test("when both the device and the cloud have data, merging asks first", async (
   expect(records().map((r) => r.id)).toEqual(expect.arrayContaining(["main", "dollars", "cloud-cash", "t-beans"]));
   expect(screen.queryByText(en("sync.merge.title"))).not.toBeOnTheScreen();
 });
+
+test("deleting the account removes cloud data and keeps this device's copy", async () => {
+  server.signIn();
+  server.receipts.add(`${USER.id}/receipt-1.jpg`);
+  server.put("sync_meta", { key: "settings_name", data: "Ana", client_updated_at: new Date(0).toISOString() });
+  await AsyncStorage.setItem(
+    SYNC_KEY,
+    JSON.stringify({ outbox: {}, values: { userId: USER.id, bootstrapped: USER.id } }),
+  );
+  const { user } = await renderApp("/settings", fixture());
+  expect(await screen.findByText(en("account.signedInAs", { email: USER.email }))).toBeOnTheScreen();
+  await settled();
+
+  await user.press(screen.getByRole("button", { name: en("account.delete") }));
+  expect(await screen.findByText(en("account.delete.title"))).toBeOnTheScreen();
+  await user.press(screen.getByRole("button", { name: en("account.delete.keep") }));
+  await settled();
+
+  expect(client.rpc).toHaveBeenCalledWith("delete_account");
+  expect(server.receipts.size).toBe(0);
+  expect(records()).toEqual([]);
+  expect(meta()).toEqual([]);
+  expect(await screen.findByLabelText(en("account.emailA11y"))).toBeOnTheScreen();
+  // The device keeps its data, no longer linked to the deleted account.
+  expect((await stored()).transactions.map((t) => t.id)).toContain("t-beans");
+  const local = JSON.parse((await AsyncStorage.getItem(SYNC_KEY)) ?? "{}");
+  expect(local.values ?? {}).toEqual({});
+});

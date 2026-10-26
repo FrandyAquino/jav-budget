@@ -9,10 +9,12 @@ import { QuickActionsSync } from "@/features/quick-actions/quick-actions";
 import { WidgetSync } from "@/features/widgets/widget-sync";
 import { BackupSync } from "@/features/backup/BackupSync";
 import { SyncAgent } from "@/features/sync/SyncAgent";
-export { ErrorBoundary } from "expo-router";
+import { withMonitoring } from "@/shared/monitoring";
+export { ErrorBoundary } from "@/shared/monitoring";
 
 void SplashScreen.preventAutoHideAsync().catch(() => {});
-export default function RootLayout() {
+export default withMonitoring(RootLayout);
+function RootLayout() {
   return (
     <SafeAreaProvider>
       <FinanceProvider>

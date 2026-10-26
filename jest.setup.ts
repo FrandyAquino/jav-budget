@@ -26,6 +26,12 @@ jest.mock("expo-font", () => ({
   isLoaded: () => true,
   loadAsync: () => Promise.resolve(),
 }));
+// Crash reporting is off without a DSN; its ESM build doesn't load under Jest.
+jest.mock("@sentry/react-native", () => ({
+  init: jest.fn(),
+  wrap: (root: unknown) => root,
+  captureException: jest.fn(),
+}));
 // Device services used by FinanceProvider/AppShell (reminders, Face ID, background task).
 jest.mock("expo-notifications", () => ({
   setNotificationHandler: jest.fn(),

@@ -26,6 +26,7 @@ import {
   type MetaRow,
   type RecordRow,
 } from "./core";
+import { RECEIPTS_BUCKET } from "./config";
 import { getSupabase } from "./supabase";
 import {
   downloadReceipt,
@@ -450,16 +451,56 @@ async function leave(mode: "keep" | "erase") {
   }
   // Local scope: other devices stay signed in.
   await client.auth.signOut({ scope: "local" }).catch(() => {});
-  if (mode === "erase") {
-    // Same as Settings -> erase: empty data with this device's preferences.
-    await transact((base) => parseState(keepDeviceSettings(emptyState(), base)), {
-      record: false,
-    });
-    await patch({ clearOutbox: true, clearValues: true });
-    sweepReceipts({ transactions: [] });
-  }
+  if (mode === "erase") await eraseDevice();
   setUser(null);
   setSyncStatus({ lastSyncedAt: mode === "erase" ? null : getSyncStatus().lastSyncedAt });
+}
+// Same as Settings -> erase: empty data with this device's preferences.
+async function eraseDevice() {
+  await transact((base) => parseState(keepDeviceSettings(emptyState(), base)), {
+    record: false,
+  });
+  await patch({ clearOutbox: true, clearValues: true });
+  sweepReceipts({ transactions: [] });
+}
+
+// Permanently deletes the cloud account: receipt photos first (only the
+// Storage API can remove them), then the user, whose sync rows cascade.
+// keep: this device keeps its data, unlinked from any account.
+// Resolves to null on success; on failure nothing on the device changes.
+export function deleteAccount(mode: "keep" | "erase"): Promise<SyncErrorCode | null> {
+  return track(removeAccount(mode));
+}
+async function removeAccount(mode: "keep" | "erase"): Promise<SyncErrorCode | null> {
+  const client = getSupabase();
+  if (!client) return "server";
+  await running;
+  try {
+    const session = await currentSession(client);
+    if (!session) return "auth";
+    const user = session.user.id;
+    const bucket = client.storage.from(RECEIPTS_BUCKET);
+    for (;;) {
+      const { data: files, error } = await bucket.list(user, { limit: PAGE });
+      if (error) throw error;
+      if (!files?.length) break;
+      const { data: removed, error: removeError } = await bucket.remove(
+        files.map((file) => `${user}/${file.name}`),
+      );
+      if (removeError) throw removeError;
+      if (!removed?.length) throw new Error("Receipts could not be removed");
+    }
+    const { error } = await client.rpc("delete_account");
+    if (error) throw error;
+    await client.auth.signOut({ scope: "local" }).catch(() => {});
+  } catch (error) {
+    return errorCode(error);
+  }
+  if (mode === "erase") await eraseDevice();
+  else await patch({ clearOutbox: true, clearValues: true });
+  setUser(null);
+  setSyncStatus({ lastSyncedAt: null });
+  return null;
 }
 
 // Loads the persisted status and follows auth changes. Returns a cleanup.
