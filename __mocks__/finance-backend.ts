@@ -10,6 +10,7 @@ import {
   notifyOutbox,
   patchSyncLocal,
   serialize,
+  requireLedgerOwner,
   type Listener,
   type SyncLocal,
   type SyncWork,
@@ -30,6 +31,7 @@ export function transact<R extends FinanceState | null>(
   options: TransactOptions = {},
 ): Promise<R> {
   return serialize(async () => {
+    if (options.owner) requireLedgerOwner(await readSyncLocal(), options.owner);
     const raw = await AsyncStorage.getItem(LEGACY_KEY);
     const base = raw ? parseState(JSON.parse(raw)) : null;
     const result = change(base);

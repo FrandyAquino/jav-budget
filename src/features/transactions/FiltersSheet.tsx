@@ -3,7 +3,8 @@ import { View } from "react-native";
 import { SelectField } from "@/shared/SelectField";
 import { useFinance } from "@/features/finance/store";
 import { entryAmount, monthKey, validDate } from "@/features/finance/model";
-import { Action, Choice, Field, FormError, Row, Sheet, Txt } from "@/shared/ui";
+import { Action, Choice, AmountField,
+  Field, FormError, Row, Sheet, Txt } from "@/shared/ui";
 import { defaultFilters as defaults, type Filters } from "./activity-model";
 import { useT } from "@/shared/i18n/react";
 
@@ -90,21 +91,21 @@ export function FiltersSheet({
       </Row>
       <Row>
         <View style={{ flex: 1 }}>
-          <Field
+          <AmountField
+            mode={mode}
             label={t("filters.min")}
             accessibilityLabel={t("filters.min")}
             value={value.min}
             onChangeText={(v) => set("min", v)}
-            keyboardType={mode === "cents" ? "number-pad" : "decimal-pad"}
           />
         </View>
         <View style={{ flex: 1 }}>
-          <Field
+          <AmountField
+            mode={mode}
             label={t("filters.max")}
             accessibilityLabel={t("filters.max")}
             value={value.max}
             onChangeText={(v) => set("max", v)}
-            keyboardType={mode === "cents" ? "number-pad" : "decimal-pad"}
           />
         </View>
       </Row>

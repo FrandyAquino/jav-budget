@@ -3,7 +3,7 @@ import { useFinance } from "@/features/finance/store";
 import {
   budgetStatus,
   previousBudget,
-  shiftMonth,
+  shiftPeriod,
   type Budget,
 } from "@/features/finance/model";
 import { Amount, Card, Icon, Progress, Row, Txt, useTheme } from "@/shared/ui";
@@ -27,7 +27,7 @@ export function BudgetRow({
   const color = statusColor(status, colors);
   const base = status.limit + status.carried;
   const hasCarry = budget.rollover && !!previousBudget(state, budget);
-  const fromMonth = shiftMonth(budget.month, -1);
+  const fromMonth = shiftPeriod(budget.month, -1);
   return (
     <Pressable
       accessibilityRole="button"

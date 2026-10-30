@@ -26,6 +26,7 @@ import {
 import { isUnreadableData } from "./storage/shared";
 import { registerBackgroundProcessing } from "./storage/background";
 import { sweepReceipts } from "@/features/transactions/receipts";
+import { canAccessLedger, getSyncStatus, useSyncStatus } from "@/features/sync/status";
 
 type Store = {
   state: FinanceState;
@@ -41,6 +42,7 @@ type Store = {
 };
 const Context = createContext<Store | null>(null);
 export function FinanceProvider({ children }: { children: ReactNode }) {
+  const accessible = canAccessLedger(useSyncStatus());
   const [state, setState] = useState<FinanceState>(emptyState);
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -57,10 +59,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   );
   const update = useCallback(
     (change: (current: FinanceState) => FinanceState) => {
+      const owner = getSyncStatus().user?.id;
       const task = queue.current.then(async () => {
-        const next = await transact((base) =>
-          parseState(change(base ?? current.current)),
-        );
+        const next = await transact((base) => {
+          if (!canAccessLedger() || getSyncStatus().user?.id !== owner)
+            throw new Error(t("auth.required"));
+          return parseState(change(base ?? current.current));
+        }, { owner });
         current.current = next;
         setState(next);
       });
@@ -117,7 +122,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (ready) void registerBackgroundProcessing().catch(() => {});
   }, [ready]);
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || !accessible) return;
     const subscription = AppState.addEventListener("change", (status) => {
       if (status === "active")
         void update(processRecurring).catch(() =>
@@ -125,9 +130,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         );
     });
     return () => subscription.remove();
-  }, [ready, update]);
+  }, [ready, update, accessible]);
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || !accessible) return;
     let timer: ReturnType<typeof setTimeout>;
     const schedule = () => {
       const midnight = new Date();
@@ -141,15 +146,15 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     };
     schedule();
     return () => clearTimeout(timer);
-  }, [ready, update]);
+  }, [ready, update, accessible]);
   useEffect(() => {
     if (!ready) return;
     reminders.current = reminders.current
-      .then(() => syncReminders(state))
+      .then(() => syncReminders(accessible ? state : emptyState()))
       .catch(() =>
         setNotice(t("store.remindersFailed")),
       );
-  }, [ready, state, language]);
+  }, [ready, state, language, accessible]);
   useEffect(() => {
     if (!notice) return;
     const timeout = setTimeout(() => setNotice(""), 7000);

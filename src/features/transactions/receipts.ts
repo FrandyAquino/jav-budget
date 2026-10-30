@@ -71,3 +71,10 @@ export function sweepReceipts(state: Pick<FinanceState, "transactions">) {
 }
 
 export const receiptsPersist = true;
+
+// Account replacement must fail closed if old photos cannot be removed.
+export function clearReceiptCache() {
+  const dir = folder();
+  if (!dir.exists) return;
+  for (const file of dir.list()) if (file instanceof File) file.delete();
+}

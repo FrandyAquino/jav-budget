@@ -8,6 +8,6 @@ export function getSupabase(): SupabaseClient | null {
   if (client !== undefined) return client;
   if (!syncConfigured || typeof window === "undefined") return null;
   return (client = createClient(SUPABASE_URL, SUPABASE_KEY, {
-    auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: false },
+    auth: { autoRefreshToken: true, persistSession: true, flowType: "pkce", detectSessionInUrl: false },
   }));
 }

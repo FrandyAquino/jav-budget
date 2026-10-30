@@ -19,6 +19,7 @@ import {
   notifyOutbox,
   serialize,
   UnreadableDataError,
+  requireLedgerOwner,
   type Listener,
   type SyncLocal,
   type SyncPatch,
@@ -236,6 +237,7 @@ export function transact<R extends FinanceState | null>(
     let wrote = false;
     let recorded = false;
     await exclusive(async (txn) => {
+      if (options.owner) requireLedgerOwner(await readSyncLocal(txn), options.owner);
       const revision = Number((await internal(txn, "revision")) ?? 0);
       const current = cache?.revision === revision ? cache : await read(txn, revision);
       let base = current.state;

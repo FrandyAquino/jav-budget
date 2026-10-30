@@ -44,6 +44,19 @@ export function smartDate(value: string | Date, lang: Language = getLanguage()) 
 function capitalize(text: string, lang: Language) {
   return text.charAt(0).toLocaleUpperCase(getLocale(lang)) + text.slice(1);
 }
+// Half-month budget periods ("2026-10-Q1"): "Oct 1–15" / "1–15 oct".
+function halfLabel(period: string, lang: Language, year: boolean) {
+  const month = period.slice(0, 7);
+  const [y, m] = month.split("-").map(Number);
+  const days = period.endsWith("Q1")
+    ? "1–15"
+    : `16–${new Date(y, m, 0).getDate()}`;
+  const name = formatDate(month, { month: "short" }, lang).replace(/\.$/, "");
+  if (lang === "es") return `${days} ${name}${year ? ` ${y}` : ""}`;
+  return `${name} ${days}${year ? `, ${y}` : ""}`;
+}
+const isHalf = (value: string | Date) =>
+  typeof value === "string" && /^\d{4}-\d{2}-Q[12]$/.test(value);
 // "October 2026" / "Octubre 2026". Spanish month names are lowercase
 // mid-sentence, so standalone labels are capitalized.
 export function monthLabel(
@@ -51,6 +64,7 @@ export function monthLabel(
   lang: Language = getLanguage(),
   style: "long" | "short" = "long",
 ) {
+  if (isHalf(month)) return halfLabel(month as string, lang, true);
   const text = formatDate(month, { month: style, year: "numeric" }, lang);
   return capitalize(lang === "es" ? text.replace(" de ", " ") : text, lang);
 }
@@ -62,6 +76,7 @@ export function monthName(
   style: "long" | "short" = "long",
   standalone = false,
 ) {
+  if (isHalf(month)) return halfLabel(month as string, lang, false);
   const text = formatDate(month, { month: style }, lang).replace(/\.$/, "");
   return standalone ? capitalize(text, lang) : text;
 }

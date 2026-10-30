@@ -1,4 +1,4 @@
-import { shiftMonth } from "@/features/finance/model";
+import { shiftPeriod } from "@/features/finance/model";
 import { IconButton, Row, Txt, useTheme } from "@/shared/ui";
 import { useT } from "@/shared/i18n/react";
 
@@ -16,7 +16,7 @@ export function MonthPicker({
       <IconButton
         icon="chevron-left"
         label={t("budgets.previousMonth")}
-        onPress={() => onChange(shiftMonth(month, -1))}
+        onPress={() => onChange(shiftPeriod(month, -1))}
       />
       <Txt size={13} weight="500" color={colors.muted}>
         {monthLabel(month)}
@@ -24,7 +24,7 @@ export function MonthPicker({
       <IconButton
         icon="chevron-right"
         label={t("budgets.nextMonth")}
-        onPress={() => onChange(shiftMonth(month, 1))}
+        onPress={() => onChange(shiftPeriod(month, 1))}
       />
     </Row>
   );

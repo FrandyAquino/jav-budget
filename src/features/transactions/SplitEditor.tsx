@@ -9,7 +9,7 @@ import {
   type Settings,
   type Split,
 } from "@/features/finance/model";
-import { Field, IconButton, Row, Txt, useTheme } from "@/shared/ui";
+import { AmountField, IconButton, Row, Txt, useTheme } from "@/shared/ui";
 import { t as tr } from "@/shared/i18n/core";
 import { useT } from "@/shared/i18n/react";
 
@@ -139,12 +139,12 @@ export function SplitEditor({
               )
               .map((c) => ({ value: c.id, label: c.name, icon: c.icon }))}
           />
-          <Field
+          <AmountField
+            mode={mode}
             accessibilityLabel={t("split.amount", { part: index + 1 })}
             placeholder={mode === "cents" ? "0" : "0.00"}
             value={part.amount}
             onChangeText={(amount) => set(part.key, { amount })}
-            keyboardType={mode === "cents" ? "number-pad" : "decimal-pad"}
           />
         </View>
       ))}

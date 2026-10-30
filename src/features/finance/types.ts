@@ -9,13 +9,16 @@ export type Account = {
   color: string;
   limit?: number;
   dueDay?: number;
+  // Savings and similar accounts left out of the home "available" balance.
+  excludeFromTotal?: boolean;
 };
 export type Category = {
   id: string;
   name: string;
   icon: string;
   color: string;
-  kind: "expense" | "income";
+  // Transfer categories (savings, card payments…) only label transfers.
+  kind: "expense" | "income" | "transfer";
 };
 export type Split = { categoryId: string; amount: number };
 export type Transaction = {
@@ -42,6 +45,7 @@ export type Budget = {
   id: string;
   categoryId: string;
   currency: Currency;
+  // Budget period: "2026-10" (month) or "2026-10-Q1" / "2026-10-Q2" (halves).
   month: string;
   limit: number;
   rollover?: boolean; // parseState always fills false.
@@ -50,6 +54,7 @@ export type Budget = {
 export type MonthlyBudget = {
   id: string;
   currency: Currency;
+  // Same period format as Budget.month.
   month: string;
   limit: number;
 };
@@ -88,6 +93,8 @@ export type Settings = {
   biometrics: boolean;
   notifications: boolean;
   exchangeRate?: ExchangeRate;
+  // Budget period length; parseState fills "monthly".
+  budgetPeriod?: "monthly" | "biweekly";
   // Native automatic daily backups; parseState fills true.
   autoBackup?: boolean;
   // ISO timestamp of the last manual export (web export reminder).

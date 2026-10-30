@@ -44,6 +44,8 @@ export function hasCategory(
   tx: Pick<Transaction, "kind" | "amount" | "categoryId" | "splits">,
   categoryId: string,
 ) {
+  // Transfers have no allocations but may carry an optional label category.
+  if (tx.kind === "transfer") return !!categoryId && tx.categoryId === categoryId;
   return allocations(tx).some((a) => a.categoryId === categoryId);
 }
 export function primaryCategory(splits: readonly Split[]) {
@@ -109,6 +111,13 @@ export function validateTransaction(
       throw new Error(tr("errors.transferReceived"));
     if (destination.currency === account.currency && tx.received !== tx.amount)
       throw new Error(tr("errors.transferMismatch"));
+    if (
+      tx.categoryId &&
+      !state.categories.some(
+        (c) => c.id === tx.categoryId && c.kind === "transfer",
+      )
+    )
+      throw new Error(tr("errors.categoryMismatch"));
   } else if (
     !state.categories.some((c) => c.id === tx.categoryId && c.kind === tx.kind)
   )

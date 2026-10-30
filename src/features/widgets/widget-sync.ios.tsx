@@ -1,15 +1,17 @@
 import { useEffect, useRef } from "react";
 import { useFinance } from "@/features/finance/store";
 import BudgetWidget from "./budget-widget";
-import { monthKey } from "@/features/finance/model";
+import { emptyState, monthKey } from "@/features/finance/model";
 import { widgetTimeline } from "./snapshot";
 import { useT } from "@/shared/i18n/react";
+import { canAccessLedger, useSyncStatus } from "@/features/sync/status";
 
 const DEBOUNCE_MS = 800;
 
 // Pushes a fresh snapshot to the home-screen widget whenever finance state changes.
 export function WidgetSync() {
   const { state, ready } = useFinance();
+  const accessible = canAccessLedger(useSyncStatus());
   // Snapshot strings follow the app language; resync when it changes.
   const { lang } = useT();
   const last = useRef("");
@@ -17,7 +19,9 @@ export function WidgetSync() {
     if (!ready) return;
     const timer = setTimeout(() => {
       try {
-        const entries = widgetTimeline(state);
+        const hidden = emptyState();
+        hidden.settings.biometrics = true;
+        const entries = widgetTimeline(accessible ? state : hidden);
         const key = monthKey() + JSON.stringify(entries.map((e) => e.props));
         if (key === last.current) return;
         last.current = key;
@@ -25,8 +29,8 @@ export function WidgetSync() {
       } catch (error) {
         console.warn("Widget sync failed", error);
       }
-    }, DEBOUNCE_MS);
+    }, accessible ? DEBOUNCE_MS : 0);
     return () => clearTimeout(timer);
-  }, [state, ready, lang]);
+  }, [state, ready, lang, accessible]);
   return null;
 }

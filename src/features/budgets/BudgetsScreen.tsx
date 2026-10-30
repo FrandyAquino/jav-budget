@@ -3,14 +3,16 @@ import { Pressable, View } from "react-native";
 import { useFinance } from "@/features/finance/store";
 import {
   copyBudgets,
-  monthKey,
   monthlyBudget,
-  shiftMonth,
+  periodKey,
+  shiftPeriod,
   type Budget,
+  type BudgetPeriod,
 } from "@/features/finance/model";
 import {
   Action,
   Card,
+  Choice,
   CurrencySwitch,
   Empty,
   FormError,
@@ -36,12 +38,21 @@ export default function BudgetsScreen() {
   const { state, update, setNotice } = useFinance();
   const { colors } = useTheme();
   const { t, monthName } = useT();
-  const [month, setMonth] = useState(monthKey());
+  const kind = state.settings.budgetPeriod ?? "monthly";
+  const [month, setMonth] = useState(() => periodKey(kind));
   const [editing, setEditing] = useState<Budget | "new">();
   const [editingMonthly, setEditingMonthly] = useState(false);
   const copying = useFormAction();
   const currency = state.settings.currency;
-  const previous = shiftMonth(month, -1);
+  const previous = shiftPeriod(month, -1);
+  const changeKind = (next: BudgetPeriod) => {
+    if (next === kind) return;
+    setMonth(periodKey(next));
+    void update((s) => ({
+      ...s,
+      settings: { ...s.settings, budgetPeriod: next },
+    }));
+  };
   const budgets = state.budgets.filter(
     (b) => b.month === month && b.currency === currency,
   );
@@ -71,6 +82,14 @@ export default function BudgetsScreen() {
         />
       }
     >
+      <Choice
+        value={kind}
+        items={[
+          { value: "monthly", label: t("budgets.periodMonthly") },
+          { value: "biweekly", label: t("budgets.periodBiweekly") },
+        ]}
+        onChange={changeKind}
+      />
       <Row style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
         <MonthPicker month={month} onChange={setMonth} />
         <CurrencySwitch />

@@ -10,12 +10,14 @@ import {
   patchSyncLocal,
   serialize,
   UnreadableDataError,
+  requireLedgerOwner,
   type Listener,
   type SyncLocal,
   type SyncWork,
   type TransactOptions,
 } from "./shared";
 import { syncChanges } from "@/features/sync/core";
+import { getSyncStatus, setSyncStatus } from "@/features/sync/status";
 
 // Cloud-sync bookkeeping (outbox + small values), written under the same lock.
 const SYNC_KEY = "jav-budget:sync:v1";
@@ -57,6 +59,10 @@ export function transact<R extends FinanceState | null>(
 ): Promise<R> {
   return serialize(() =>
     withLock(async () => {
+      if (options.owner) {
+        if (!locked()) throw new Error(t("store.storageBusy"));
+        requireLedgerOwner(await readSyncLocal(), options.owner);
+      }
       let raw: string | null = null;
       let base: FinanceState | null = null;
       try {
@@ -104,6 +110,7 @@ export function syncTransact<R>(
       const raw = await AsyncStorage.getItem(LEGACY_KEY);
       const local = await readSyncLocal();
       const output = work(raw ? parseStored(raw) : null, local);
+      if ((output.state || output.patch) && !locked()) throw new Error(t("store.storageBusy"));
       if (output.state) {
         const data = JSON.stringify(output.state);
         if (data !== raw) {
@@ -138,12 +145,14 @@ export function discardUnreadableData(): Promise<void> {
 export function subscribe(listener: Listener, onError: () => void) {
   listeners.add(listener);
   const refresh = (event: StorageEvent) => {
-    if (event.key !== LEGACY_KEY || !event.newValue) return;
-    try {
-      listener(parseState(JSON.parse(event.newValue)));
-    } catch {
-      onError();
-    }
+    if (event.key !== null && event.key !== LEGACY_KEY && event.key !== SYNC_KEY) return;
+    // A different tab may be replacing the shared ledger for another account.
+    // Close the gate before publishing any external snapshot.
+    setSyncStatus({ ledgerUserId: null });
+    void syncTransact((base, local) => {
+      if (base && local.values.userId === getSyncStatus().user?.id) listener(base);
+      return { result: undefined };
+    }).catch(onError).finally(notifyOutbox);
   };
   if (typeof window !== "undefined") window.addEventListener("storage", refresh);
   return () => {

@@ -9,7 +9,7 @@ import {
 } from "@/features/finance/model";
 import {
   Action,
-  Field,
+  AmountField,
   FormError,
   Sheet,
   Txt,
@@ -82,13 +82,13 @@ export function MonthlyBudgetForm({
           <Txt size={13} color={colors.muted}>
             {t("monthlyForm.body")}
           </Txt>
-          <Field
+          <AmountField
+            mode={mode}
             label={t("monthlyForm.limitLabel", { currency })}
             accessibilityLabel={t("monthlyForm.limitA11y")}
             placeholder={mode === "cents" ? "0" : "0.00"}
             value={amount}
             onChangeText={setAmount}
-            keyboardType={mode === "cents" ? "number-pad" : "decimal-pad"}
           />
           {allocated > 0 && (
             <Txt size={12} color={colors.muted}>

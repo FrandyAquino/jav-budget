@@ -13,12 +13,19 @@ import {
   serializeBackup,
 } from "./policy";
 import { reportBackup } from "./status";
+import { canAccessLedger, getSyncStatus } from "@/features/sync/status";
 
 // Native automatic backups in Documents/Backups (see policy.ts for the rules).
 export const autoBackupSupported = true;
 export type BackupEntry = { name: string; date: string; size: number; uri: string };
 
-const folder = () => new Directory(Paths.document, BACKUP_FOLDER);
+function owner() {
+  const status = getSyncStatus();
+  if (!canAccessLedger(status)) throw new Error("Sign in before accessing backups");
+  return status.user!.id;
+}
+// Legacy unowned backups stay on disk, but are never listed under a new account.
+const folder = () => new Directory(Paths.document, BACKUP_FOLDER, owner());
 
 // Strict backup files only, newest first.
 export function listBackups(): BackupEntry[] {
@@ -35,14 +42,15 @@ export function listBackups(): BackupEntry[] {
 }
 
 // listBackups() cached per status revision, safe to call while rendering.
-let cached: { revision: number; list: BackupEntry[]; error?: string } | undefined;
+let cached: { revision: number; owner: string | null; list: BackupEntry[]; error?: string } | undefined;
 export function cachedBackups(revision: number) {
-  if (cached?.revision !== revision)
+  const user = canAccessLedger() ? getSyncStatus().user!.id : null;
+  if (cached?.revision !== revision || cached?.owner !== user)
     try {
-      cached = { revision, list: listBackups() };
+      cached = { revision, owner: user, list: user ? listBackups() : [] };
     } catch (error) {
       console.warn("[backup] listing backups failed", error);
-      cached = { revision, list: [], error: t("backup.listFailed") };
+      cached = { revision, owner: user, list: [], error: t("backup.listFailed") };
     }
   return cached;
 }
@@ -85,8 +93,11 @@ function prune() {
 // that changed since the newest backup. Never throws; failures are logged and
 // surfaced through the backup status in Settings.
 export function runAutoBackup(state: FinanceState): Promise<boolean> {
+  if (!canAccessLedger()) return Promise.resolve(false);
+  const user = owner();
   return serial(async () => {
     try {
+      if (!canAccessLedger() || owner() !== user) return false;
       if (state.settings.autoBackup === false || !hasRealData(state)) return false;
       const backups = listBackups();
       const today = localDate();
@@ -102,6 +113,7 @@ export function runAutoBackup(state: FinanceState): Promise<boolean> {
       const content = serializeBackup(state);
       const newest = backups[0];
       if (newest && (await new File(newest.uri).text()) === content) return false;
+      if (!canAccessLedger() || owner() !== user) return false;
       await write(today, content);
       prune();
       reportBackup();
@@ -116,7 +128,9 @@ export function runAutoBackup(state: FinanceState): Promise<boolean> {
 
 // "Back up now": writes (or refreshes) today's file even if one exists.
 export function backupNow(state: FinanceState): Promise<void> {
+  const user = owner();
   return serial(async () => {
+    if (owner() !== user) throw new Error("Account changed before backup");
     if (state.demo) throw new Error(t("backup.demoSkipped"));
     if (!hasRealData(state)) throw new Error(t("backup.nothingToBackUp"));
     try {
@@ -133,6 +147,7 @@ export function backupNow(state: FinanceState): Promise<void> {
 
 export async function readBackup(entry: BackupEntry): Promise<string> {
   const file = new File(folder(), entry.name);
+  if (file.uri !== entry.uri) throw new Error(t("backup.missing"));
   if (!parseBackupName(file.name) || !file.exists) throw new Error(t("backup.missing"));
   if ((file.size ?? 0) > 10_000_000) throw new Error(t("device.backupTooLarge"));
   return file.text();
@@ -141,7 +156,9 @@ export async function readBackup(entry: BackupEntry): Promise<string> {
 export async function shareBackup(entry: BackupEntry) {
   const sharing = await import("expo-sharing");
   if (!(await sharing.isAvailableAsync())) throw new Error(t("device.sharingUnavailable"));
-  await sharing.shareAsync(new File(folder(), entry.name).uri, {
+  const file = new File(folder(), entry.name);
+  if (file.uri !== entry.uri || !parseBackupName(file.name)) throw new Error(t("backup.missing"));
+  await sharing.shareAsync(file.uri, {
     mimeType: "application/json",
     UTI: "public.json",
     dialogTitle: t("device.exportTitle"),

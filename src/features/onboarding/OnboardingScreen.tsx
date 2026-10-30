@@ -26,6 +26,7 @@ import {
   Action,
   Chip,
   Choice,
+  AmountField,
   Field,
   FormError,
   Icon,
@@ -284,7 +285,8 @@ export default function OnboardingScreen() {
           />
         </Group>
         <View style={{ gap: 8 }}>
-          <Field
+          <AmountField
+            mode={mode}
             label={t(credit ? "onboarding.account.owed" : "onboarding.account.balance", {
               currency: accountCurrencyValue,
             })}
@@ -292,7 +294,6 @@ export default function OnboardingScreen() {
             placeholder={mode === "cents" ? "0" : "0.00"}
             value={balance}
             onChangeText={setBalance}
-            keyboardType={mode === "cents" ? "number-pad" : "decimal-pad"}
           />
           <Txt size={12} color={colors.muted}>
             {t("onboarding.account.balanceHint")}

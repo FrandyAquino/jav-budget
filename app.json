@@ -13,8 +13,8 @@
       "infoPlist": {
         "CFBundleAllowMixedLocalizations": true,
         "ITSAppUsesNonExemptEncryption": false,
-        "UIFileSharingEnabled": true,
-        "LSSupportsOpeningDocumentsInPlace": true
+        "UIFileSharingEnabled": false,
+        "LSSupportsOpeningDocumentsInPlace": false
       },
       "buildNumber": "1",
       "privacyManifests": {
@@ -97,15 +97,14 @@
       "package": "com.frandyaquino.javbudget",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png",
-        "backgroundColor": "#25272B"
+        "backgroundColor": "#0E1424"
       },
       "predictiveBackGestureEnabled": false,
       "versionCode": 1
     },
     "web": {
       "output": "single",
-      "favicon": "./assets/icons/graphite.png"
+      "favicon": "./assets/brand/icon-dark.png"
     },
     "locales": {
       "en": "./locales/en.json",
@@ -146,8 +145,8 @@
             "name": "Chalk",
             "ios": "./assets/icons/chalk.png",
             "android": {
-              "foregroundImage": "./assets/icons/chalk.png",
-              "backgroundColor": "#F5F5F2"
+              "foregroundImage": "./assets/icons/chalk-android.png",
+              "backgroundColor": "#EEF2F8"
             }
           }
         ]
@@ -200,7 +199,8 @@
       ],
       "expo-image",
       "@sentry/react-native/expo",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

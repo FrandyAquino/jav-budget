@@ -7,12 +7,12 @@ import {
   amountText,
   entryAmount,
   id,
-  shiftMonth,
+  shiftPeriod,
   type Budget,
 } from "@/features/finance/model";
 import {
   Action,
-  Field,
+  AmountField,
   FormError,
   Row,
   Sheet,
@@ -93,20 +93,20 @@ export function BudgetForm({
               .map((c) => ({ value: c.id, label: c.name, icon: c.icon }))}
             onCreate={() => setCreatingCategory(true)}
           />
-          <Field
+          <AmountField
+            mode={mode}
             label={t("budgetForm.limitLabel", { currency })}
             accessibilityLabel={t("budgetForm.limitA11y")}
             placeholder={mode === "cents" ? "0" : "0.00"}
             value={amount}
             onChangeText={setAmount}
-            keyboardType={mode === "cents" ? "number-pad" : "decimal-pad"}
           />
           <Row>
             <View style={{ flex: 1, gap: 4 }}>
               <Txt weight="500">{t("budgetForm.rollover")}</Txt>
               <Txt size={12} color={colors.muted}>
                 {t("budgetForm.rolloverHint", {
-                  month: monthName(shiftMonth(month, -1)),
+                  month: monthName(shiftPeriod(month, -1)),
                 })}
               </Txt>
             </View>

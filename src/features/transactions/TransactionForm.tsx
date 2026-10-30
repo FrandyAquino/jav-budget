@@ -22,6 +22,7 @@ import {
   Action,
   Choice,
   Empty,
+  AmountField,
   Field,
   FormError,
   Sheet,
@@ -74,8 +75,9 @@ export function TransactionForm({
   );
   const [categoryId, setCategory] = useState(
     transaction?.categoryId ??
-      state.categories.find((c) => c.kind === kind)?.id ??
-      "",
+      (kind === "transfer"
+        ? ""
+        : (state.categories.find((c) => c.kind === kind)?.id ?? "")),
   );
   const [splitting, setSplitting] = useState(!!transaction?.splits?.length);
   const [parts, setParts] = useState<SplitDraft[]>(() =>
@@ -147,8 +149,7 @@ export function TransactionForm({
         kind,
         amount: amountCents,
         accountId,
-        categoryId:
-          kind === "transfer" ? "" : (splits?.[0]?.categoryId ?? categoryId),
+        categoryId: splits?.[0]?.categoryId ?? categoryId,
         title:
           title.trim() || (kind === "transfer" ? t("txForm.transferTitle") : ""),
         note: note.trim(),
@@ -284,12 +285,13 @@ export function TransactionForm({
             onChange={(value) => {
               setKind(value);
               const first = kindCategories(value)[0]?.id ?? "";
-              setCategory(first);
+              setCategory(value === "transfer" ? "" : first);
               if (value === "transfer") setSplitting(false);
               else if (splitting) setParts(defaultParts(value, first));
             }}
           />
-          <Field
+          <AmountField
+            mode={mode}
             label={t("txForm.amountLabel", {
               currency: account?.currency ?? "DOP",
             })}
@@ -297,7 +299,6 @@ export function TransactionForm({
             placeholder="0.00"
             value={amount}
             onChangeText={setAmount}
-            keyboardType={mode === "cents" ? "number-pad" : "decimal-pad"}
             style={{ fontSize: 34, height: 72 }}
           />
           <Field
@@ -354,18 +355,30 @@ export function TransactionForm({
                   }))}
               />
               {crossCurrency && (
-                <Field
+                <AmountField
+                  mode={mode}
                   label={t("txForm.receivedLabel", {
                     currency: destination.currency,
                   })}
                   accessibilityLabel={t("txForm.received")}
                   value={received}
                   onChangeText={setReceived}
-                  keyboardType={
-                    mode === "cents" ? "number-pad" : "decimal-pad"
-                  }
                 />
               )}
+              <SelectField
+                label={t("txForm.categoryOptional")}
+                value={categoryId}
+                onChange={setCategory}
+                options={[
+                  { value: "", label: t("txForm.noCategory"), icon: "minus" },
+                  ...kindCategories("transfer").map((c) => ({
+                    value: c.id,
+                    label: c.name,
+                    icon: c.icon,
+                  })),
+                ]}
+                onCreate={() => setCreatingCategory(true)}
+              />
             </>
           ) : (
             <>
@@ -439,7 +452,7 @@ export function TransactionForm({
           )}
           {creatingCategory && (
             <CategoryForm
-              initialKind={kind === "income" ? "income" : "expense"}
+              initialKind={kind}
               onSaved={setCategory}
               onClose={() => setCreatingCategory(false)}
             />

@@ -128,6 +128,29 @@ describeIT("cloud sync against Supabase (integration)", () => {
     await wipeUser(readerB, userB);
   });
 
+  test("RLS rejects forged ownership and cross-account mutations", async () => {
+    const row = { user_id: userA, collection: "accounts", id: "rls-check", data: { name: "Private" }, client_updated_at: new Date().toISOString() };
+    expect((await readerA.from("sync_records").insert(row)).error).toBeNull();
+    expect((await readerB.from("sync_records").insert({ ...row, id: "forged" })).error).not.toBeNull();
+    expect((await readerB.from("sync_meta").upsert({ user_id: userA, key: "settings_name", data: "forged", client_updated_at: row.client_updated_at })).error).not.toBeNull();
+    const changed = await readerB.from("sync_records").update({ data: { name: "forged" } }).eq("user_id", userA).select();
+    expect(changed.error).toBeNull();
+    expect(changed.data).toEqual([]);
+    const removed = await readerB.from("sync_records").delete().eq("user_id", userA).select();
+    expect(removed.error).toBeNull();
+    expect(removed.data).toEqual([]);
+    expect((await serverRecords(readerA, userA)).find((r) => r.id === row.id)?.data).toEqual(row.data);
+    const moved = await readerA.from("sync_records").update({ user_id: userB }).eq("id", row.id);
+    expect(moved.error).not.toBeNull();
+    const anonymous = newClient();
+    const read = await anonymous.from("sync_records").select();
+    expect(read.data ?? []).toEqual([]);
+    expect((await anonymous.from("sync_records").insert({ ...row, id: "anon" })).error).not.toBeNull();
+    const forgedReceipt = await readerB.storage.from("receipts").upload(`${userA}/rls-check.jpg`, new Uint8Array([1, 2, 3]), { contentType: "image/jpeg" });
+    expect(forgedReceipt.error).not.toBeNull();
+    await wipeUser(readerA, userA);
+  });
+
   test("1. a device with data signs in on an empty cloud and pushes", async () => {
     expect(await serverRecords(readerA, userA)).toEqual([]);
     d1 = createDevice("device 1 (A)");
@@ -366,6 +389,10 @@ describeIT("cloud sync against Supabase (integration)", () => {
     expect(await serverRecords(readerB, userB)).toEqual([]);
     expect(await serverMeta(readerB, userB)).toEqual([]);
 
+    // The engine itself rejects a merge across accounts, even outside the UI.
+    await m1.engine.resolveDecision("merge");
+    expect(m1.status.getSyncStatus().decision).toEqual({ kind: "switch" });
+    expect(await serverRecords(readerB, userB)).toEqual([]);
     await m1.engine.resolveDecision("replace");
     await m1.engine.whenIdle();
     const replaced = m1.state()!;
@@ -463,5 +490,38 @@ describeIT("cloud sync against Supabase (integration)", () => {
     await p2.sync();
     expect(p2.state()!.transactions.every((t) => t.note === "bulk edit")).toBe(true);
     expect(synced(p2.state())).toEqual(synced(p1.state()));
+  });
+
+  test("9. switching accounts never reuses another user's same-named receipt", async () => {
+    await wipeUser(readerA, userA);
+    await wipeUser(readerB, userB);
+    const name = "sharedname.jpg";
+    const firstBytes = new Uint8Array([0xff, 0xd8, 1, 0xff, 0xd9]);
+    const secondBytes = new Uint8Array([0xff, 0xd8, 2, 0xff, 0xd9]);
+    const ledger = ledgerA();
+    ledger.transactions[0].receipt = receiptUri(name);
+    const shared = createDevice("shared phone A then B");
+    shared.seed(ledger);
+    shared.files.set(receiptUri(name), firstBytes);
+    await shared.signIn(IT.emailA);
+    await shared.sync();
+    await shared.engine.signOut("keep");
+
+    const other = createDevice("B other phone");
+    other.seed(ledger);
+    other.files.set(receiptUri(name), secondBytes);
+    await other.signIn(IT.emailB);
+    await other.sync();
+
+    await shared.signIn(IT.emailB);
+    await shared.sync();
+    expect(shared.status.getSyncStatus().decision).toEqual({ kind: "switch" });
+    await shared.engine.resolveDecision("replace");
+    await shared.engine.whenIdle();
+    expect(shared.status.getSyncStatus().phase).toBe("idle");
+    expect(shared.files.get(receiptUri(name))).toEqual(secondBytes);
+    const downloaded = await readerB.storage.from("receipts").download(`${userB}/${name}`);
+    expect(downloaded.error).toBeNull();
+    expect(new Uint8Array(await downloaded.data!.arrayBuffer())).toEqual(secondBytes);
   });
 });

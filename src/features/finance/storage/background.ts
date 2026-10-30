@@ -8,12 +8,15 @@ import { syncReminders } from "../device";
 import { transact } from "./backend";
 import { runAutoBackup } from "@/features/backup/files";
 import { backgroundSync } from "@/features/sync/engine";
+import { canAccessLedger } from "@/features/sync/status";
 
 // Defined at module scope (imported from the root layout) so a background launch can find it.
 export const RECURRING_TASK = "jav-budget:recurring";
 if (!TaskManager.isTaskDefined(RECURRING_TASK))
   TaskManager.defineTask(RECURRING_TASK, async () => {
     try {
+      await backgroundSync();
+      if (!canAccessLedger()) return BackgroundTask.BackgroundTaskResult.Success;
       const state = await transact((base) => {
         if (!base) return base;
         // A cold background launch has no UI to resolve the language yet

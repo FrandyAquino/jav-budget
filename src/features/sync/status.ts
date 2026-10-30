@@ -13,6 +13,9 @@ export type SyncStatus = {
   // Auth state has been read (avoids flashing the sign-in form on launch).
   ready: boolean;
   user: { id: string; email: string } | null;
+  // Only expose the ledger after its persisted owner matches this session.
+  ledgerUserId: string | null;
+  transitioning: boolean;
   phase: "idle" | "syncing" | "error" | "paused";
   error: SyncErrorCode | null;
   lastSyncedAt: string | null;
@@ -22,6 +25,8 @@ let status: SyncStatus = {
   configured: syncConfigured,
   ready: !syncConfigured,
   user: null,
+  ledgerUserId: null,
+  transitioning: false,
   phase: "idle",
   error: null,
   lastSyncedAt: null,
@@ -41,4 +46,8 @@ export function subscribeSyncStatus(listener: () => void) {
 }
 export function useSyncStatus() {
   return useSyncExternalStore(subscribeSyncStatus, getSyncStatus, getSyncStatus);
+}
+
+export function canAccessLedger(value: SyncStatus = getSyncStatus()) {
+  return value.configured && value.ready && !value.transitioning && !!value.user && value.ledgerUserId === value.user.id;
 }

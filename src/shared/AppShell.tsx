@@ -24,6 +24,8 @@ import { authenticate } from "@/features/finance/device";
 import { Action, FormError, Icon, Row, Txt, tap, useTheme } from "./ui";
 import { useT } from "./i18n/react";
 import type { PlainKey } from "./i18n/core";
+import { canAccessLedger, useSyncStatus } from "@/features/sync/status";
+import { AccountGate } from "@/features/sync/AccountGate";
 import {
   isUnlocked,
   lockExpired,
@@ -35,6 +37,7 @@ const subscribe = () => () => {};
 const clientSnapshot = () => true;
 const serverSnapshot = () => false;
 export function AppShell() {
+  const account = useSyncStatus();
   const {
     state,
     ready,
@@ -136,6 +139,8 @@ export function AppShell() {
         )}
       </>,
     );
+  if (!canAccessLedger(account))
+    return <PanelUIProvider background={false}><AccountGate /></PanelUIProvider>;
   const shell = (
     <PanelUIProvider background={false}>
       <StatusBar style={isDark ? "light" : "dark"} />

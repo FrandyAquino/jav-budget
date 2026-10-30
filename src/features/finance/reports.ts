@@ -1,4 +1,4 @@
-import { dateString, daysInRange, today } from "./dates.ts";
+import { dateString, daysInRange, periodRange, today } from "./dates.ts";
 import { convert } from "./money.ts";
 import { nextDate, recurringTemplate } from "./recurrence.ts";
 import { accountBalance, allocations, hasCategory } from "./transactions.ts";
@@ -61,6 +61,18 @@ export function monthTransactions(
   return state.transactions.filter(
     (t) =>
       t.date.startsWith(month) && t.date <= today() && ids.has(t.accountId),
+  );
+}
+export function periodTransactions(
+  state: FinanceState,
+  period: string,
+  currency: Currency,
+) {
+  const ids = currencyAccounts(state, currency);
+  const { from, to } = periodRange(period);
+  const end = to < today() ? to : today();
+  return state.transactions.filter(
+    (t) => t.date >= from && t.date <= end && ids.has(t.accountId),
   );
 }
 export function totals(state: FinanceState, month: string, currency: Currency) {
@@ -130,6 +142,12 @@ export type NetWorth = {
   byCurrency: Record<Currency, number>;
   rate?: ExchangeRate;
 };
+// Only the accounts counted as available money (excludeFromTotal unset).
+export function availableState(state: FinanceState): FinanceState {
+  return state.accounts.some((a) => a.excludeFromTotal)
+    ? { ...state, accounts: state.accounts.filter((a) => !a.excludeFromTotal) }
+    : state;
+}
 export function netWorth(state: FinanceState, currency: Currency): NetWorth {
   const byCurrency: Record<Currency, number> = {
     DOP: currencyBalance(state, "DOP"),

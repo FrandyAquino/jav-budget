@@ -252,6 +252,7 @@ export function emptyState(): FinanceState {
       appearance: "system",
       biometrics: false,
       notifications: false,
+      budgetPeriod: "monthly",
       autoBackup: true,
     },
   };

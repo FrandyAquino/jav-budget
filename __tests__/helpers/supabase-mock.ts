@@ -6,7 +6,7 @@ type Listener = (event: string, session: unknown) => void;
 
 export const VALID_CODE = "123456";
 export const USER = { id: "user-1", email: "ana@example.com" };
-const SESSION = { access_token: "token", user: USER };
+const SESSION = { access_token: "token", refresh_token: "refresh", user: USER };
 
 let clock = 0;
 const stamp = () => new Date(Date.UTC(2026, 9, 25, 10, 0, 0, ++clock)).toISOString();
@@ -50,12 +50,15 @@ const emit = (event: string) => {
 const auth = {
   getSession: jest.fn(async () => ({ data: { session: server.session }, error: null })),
   signInWithOtp: jest.fn(async (_: { email: string; options?: object }) => ({ data: {}, error: null })),
-  verifyOtp: jest.fn(async ({ token }: { email: string; token: string; type: string }) => {
-    if (token !== VALID_CODE)
+  verifyOtp: jest.fn(async ({ token, token_hash }: { email?: string; token?: string; token_hash?: string; type: string }) => {
+    if (token !== VALID_CODE && token_hash !== "valid-hash")
       return {
         data: { session: null, user: null },
         error: { name: "AuthApiError", code: "otp_expired", status: 403, message: "Token has expired or is invalid" },
       };
+    return { data: { session: SESSION, user: USER }, error: null };
+  }),
+  setSession: jest.fn(async (_: { access_token: string; refresh_token: string }) => {
     server.session = SESSION;
     void Promise.resolve().then(() => emit("SIGNED_IN"));
     return { data: { session: SESSION, user: USER }, error: null };

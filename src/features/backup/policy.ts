@@ -3,8 +3,7 @@
 import { dateString, validDate } from "../finance/dates.ts";
 import type { FinanceState } from "../finance/types.ts";
 
-// Documents/Backups. With UIFileSharingEnabled this folder shows in the iOS
-// Files app (On My iPhone › jav-budget) and is part of iCloud/device backups.
+// Documents/Backups/<user id>. Private to the app; explicit sharing exports a copy.
 export const BACKUP_FOLDER = "Backups";
 // The only names auto-backup creates, lists, restores or deletes.
 const NAME = /^jav-budget-(\d{4}-\d{2}-\d{2})\.json$/;

@@ -76,7 +76,14 @@ export type SyncPatch = {
 export type SyncWork<R> = { state?: FinanceState; patch?: SyncPatch; result: R };
 // record: false writes without adding the change to the outbox (data that came
 // from the cloud, or erasing this device's copy on sign-out).
-export type TransactOptions = { record?: boolean };
+export type TransactOptions = { record?: boolean; owner?: string };
+
+export class LedgerOwnerChangedError extends Error {
+  constructor() { super("Ledger owner changed"); }
+}
+export function requireLedgerOwner(local: SyncLocal, user: string) {
+  if (local.values.userId !== user) throw new LedgerOwnerChangedError();
+}
 
 export function patchSyncLocal(local: SyncLocal, patch: SyncPatch = {}): SyncLocal {
   const outbox = patch.clearOutbox ? {} : { ...local.outbox };

@@ -102,3 +102,35 @@ export function convert(
     ? divRound(value * scaled, BigInt(RATE_SCALE))
     : divRound(value * BigInt(RATE_SCALE), scaled);
 }
+// Live input formatting. Inputs keep the canonical text entryAmount reads
+// ("1234.5", or cent digits "123450"); fields show it grouped ("1,234.5",
+// "1,234.50"). The decimal separator is always "." and grouping ",".
+const group = (digits: string) => digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+export function formatAmountInput(raw: string, mode: Settings["numberEntry"]) {
+  if (!raw) return "";
+  if (mode === "cents") {
+    const digits = raw.padStart(3, "0");
+    return `${group(String(Number(digits.slice(0, -2))))}.${digits.slice(-2)}`;
+  }
+  const [whole, fraction] = raw.split(".");
+  return fraction === undefined
+    ? group(whole)
+    : `${group(whole || "0")}.${fraction}`;
+}
+export function parseAmountInput(text: string, mode: Settings["numberEntry"]) {
+  if (mode === "cents")
+    return text.replace(/\D/g, "").replace(/^0+/, "").slice(0, 12);
+  let value = text.trim();
+  // A typed or pasted comma used as the decimal separator ("12," / "12,50").
+  if (!value.includes(".") && /^[\d,]*,\d{0,2}$/.test(value)) {
+    const at = value.lastIndexOf(",");
+    if (!/,\d{3}$/.test(value))
+      value = `${value.slice(0, at).replace(/,/g, "")}.${value.slice(at + 1)}`;
+  }
+  value = value.replace(/[^\d.]/g, "");
+  const dot = value.indexOf(".");
+  let whole = dot < 0 ? value : value.slice(0, dot);
+  whole = whole.replace(/^0+(?=\d)/, "").slice(0, 10);
+  if (dot < 0) return whole;
+  return `${whole || "0"}.${value.slice(dot + 1).replace(/\./g, "").slice(0, 2)}`;
+}

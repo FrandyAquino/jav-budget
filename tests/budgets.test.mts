@@ -1,13 +1,22 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  availableState,
   budgetStatus,
+  categoryInUse,
+  formatAmountInput,
+  netWorth,
+  parseAmountInput,
   copyBudgets,
   defaultCategories,
   emptyState,
   monthlyBudget,
   monthlyBudgetStatus,
+  periodKey,
+  periodRange,
   saveTransaction,
+  shiftPeriod,
+  validPeriod,
   setMonthlyBudget,
   type Budget,
   type FinanceState,
@@ -190,4 +199,72 @@ test("copyBudgets copies only missing category and overall budgets", () => {
   assert.equal(again.state, result.state);
   assert.equal(copyBudgets(state, "2020-01", "2020-01").copied, 0);
   assert.throws(() => copyBudgets(state, "bad", "2020-02"));
+});
+
+test("half-month periods cover days 1-15 and 16 to the month end", () => {
+  assert.equal(periodKey("biweekly", "2024-02-15"), "2024-02-Q1");
+  assert.equal(periodKey("biweekly", "2024-02-16"), "2024-02-Q2");
+  assert.equal(periodKey("monthly", "2024-02-16"), "2024-02");
+  assert.deepEqual(periodRange("2024-02-Q2"), { from: "2024-02-16", to: "2024-02-29" });
+  assert.deepEqual(periodRange("2024-02"), { from: "2024-02-01", to: "2024-02-29" });
+  assert.equal(shiftPeriod("2024-12-Q2", 1), "2025-01-Q1");
+  assert.equal(shiftPeriod("2025-01-Q1", -1), "2024-12-Q2");
+  assert.equal(shiftPeriod("2025-01-Q1", -3), "2024-11-Q2");
+  assert.ok(validPeriod("2025-01-Q2") && !validPeriod("2025-01-Q3"));
+});
+
+test("half-month budgets count only their own days and roll over from the previous half", () => {
+  const state: FinanceState = {
+    ...fixture(),
+    transactions: [
+      tx({ date: "2020-02-10", amount: 3000 }),
+      tx({ date: "2020-02-20", amount: 5000 }),
+    ],
+    budgets: [
+      budget({ id: "q1", month: "2020-02-Q1", limit: 4000 }),
+      budget({ id: "q2", month: "2020-02-Q2", limit: 4000, rollover: true }),
+    ],
+  };
+  assert.equal(budgetStatus(state, state.budgets[0]).spent, 3000);
+  const second = budgetStatus(state, state.budgets[1]);
+  assert.equal(second.spent, 5000);
+  assert.equal(second.carried, 1000);
+  assert.equal(second.over, false);
+  assert.equal(parseState(state).budgets.length, 2);
+  const copied = copyBudgets(state, "2020-02-Q2", "2020-03-Q1");
+  assert.equal(copied.state.budgets.at(-1)?.month, "2020-03-Q1");
+});
+
+test("amount inputs group thousands while keeping the canonical text", () => {
+  assert.equal(formatAmountInput("1234567.5", "decimal"), "1,234,567.5");
+  assert.equal(formatAmountInput("0.", "decimal"), "0.");
+  assert.equal(parseAmountInput("1,234,567.5", "decimal"), "1234567.5");
+  assert.equal(parseAmountInput("1,2345", "decimal"), "12345");
+  assert.equal(parseAmountInput("12,", "decimal"), "12.");
+  assert.equal(parseAmountInput("12,50", "decimal"), "12.50");
+  assert.equal(parseAmountInput("1,234", "decimal"), "1234");
+  assert.equal(parseAmountInput("0012.345", "decimal"), "12.34");
+  assert.equal(parseAmountInput(".5", "decimal"), "0.5");
+  assert.equal(formatAmountInput("123456", "cents"), "1,234.56");
+  assert.equal(formatAmountInput("5", "cents"), "0.05");
+  assert.equal(parseAmountInput("1,234.5", "cents"), "12345");
+  assert.equal(parseAmountInput("0.0", "cents"), "");
+});
+
+test("transfers accept only transfer categories and count as category usage", () => {
+  const savings = { id: "savings", name: "Savings", icon: "box", color: "#356C56", kind: "transfer" as const };
+  const state: FinanceState = {
+    ...fixture(),
+    accounts: [...fixture().accounts, { id: "save", name: "Save", currency: "DOP", type: "bank", opening: 0, color: "#356C56", excludeFromTotal: true }],
+    categories: [...defaultCategories, savings],
+  };
+  const move = tx({ kind: "transfer", accountId: "bank", toAccountId: "save", received: 1000, categoryId: "savings", title: "To savings" });
+  const saved = saveTransaction(state, move);
+  assert.equal(saved.transactions[0].categoryId, "savings");
+  assert.ok(categoryInUse(saved, "savings"));
+  assert.throws(() => saveTransaction(state, { ...move, categoryId: "food" }));
+  assert.equal(saveTransaction(state, { ...move, categoryId: "" }).transactions[0].categoryId, "");
+  assert.equal(netWorth(availableState(saved), "DOP").byCurrency.DOP, 99000);
+  assert.equal(netWorth(saved, "DOP").byCurrency.DOP, 100000);
+  assert.equal(parseState(saved).accounts[2].excludeFromTotal, true);
 });

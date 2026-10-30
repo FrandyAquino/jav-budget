@@ -17,6 +17,7 @@ import {
   Card,
   Choice,
   Empty,
+  AmountField,
   Field,
   FormError,
   Icon,
@@ -239,6 +240,7 @@ function AccountForm({
   const [dueDay, setDueDay] = useState(
     account?.dueDay ? String(account.dueDay) : "",
   );
+  const [counted, setCounted] = useState(!account?.excludeFromTotal);
   const [deleting, setDeleting] = useState(false);
   const hasHistory =
     account &&
@@ -317,13 +319,13 @@ function AccountForm({
               onChange={setCurrency}
             />
           )}
-          <Field
+          <AmountField
+            mode={mode}
             label={t("accountForm.openingLabel", { currency })}
             accessibilityLabel={t("accountForm.opening")}
             placeholder={mode === "cents" ? "0" : "0.00"}
             value={opening}
             onChangeText={setOpening}
-            keyboardType={mode === "cents" ? "number-pad" : "decimal-pad"}
           />
           <Choice
             value={negative ? "negative" : "positive"}
@@ -338,12 +340,12 @@ function AccountForm({
           </Txt>
           {type === "credit" && (
             <>
-              <Field
+              <AmountField
+                mode={mode}
                 label={t("accountForm.limitLabel")}
                 accessibilityLabel={t("accountForm.limit")}
                 value={limit}
                 onChangeText={setLimit}
-                keyboardType={mode === "cents" ? "number-pad" : "decimal-pad"}
               />
               <Field
                 label={t("accountForm.dueLabel")}
@@ -354,6 +356,20 @@ function AccountForm({
               />
             </>
           )}
+          <View style={{ gap: 8 }}>
+            <Txt size={12} weight="500">
+              {t("accountForm.availableLabel")}
+            </Txt>
+            <Choice
+              value={counted ? "yes" : "no"}
+              items={[
+                { value: "yes", label: t("accountForm.availableYes") },
+                { value: "no", label: t("accountForm.availableNo") },
+              ]}
+              onChange={(value) => setCounted(value === "yes")}
+            />
+            <Txt size={11}>{t("accountForm.availableHint")}</Txt>
+          </View>
           <Action
             loading={form.busy}
             onPress={() =>
@@ -390,6 +406,7 @@ function AccountForm({
                   ...(type === "credit" && dueDay
                     ? { dueDay: Number(dueDay) }
                     : {}),
+                  ...(counted ? {} : { excludeFromTotal: true }),
                 };
                 await update((s) => ({
                   ...s,

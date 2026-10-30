@@ -2,8 +2,8 @@ import { Pressable, View } from "react-native";
 import { router } from "expo-router";
 import {
   categoryTotals,
-  monthKey,
-  monthTransactions,
+  periodKey,
+  periodTransactions,
   type Currency,
   type FinanceState,
 } from "@/features/finance/model";
@@ -29,13 +29,13 @@ export function BudgetCard({
 }) {
   const { colors } = useTheme();
   const { t, money } = useT();
-  const month = monthKey();
+  const month = periodKey(state.settings.budgetPeriod);
   const budgets = state.budgets.filter(
     (b) => b.month === month && b.currency === currency,
   );
-  // One split-aware pass over the month instead of a full scan per budget.
+  // One split-aware pass over the budget period instead of a full scan per budget.
   const spentBy = new Map(
-    categoryTotals(monthTransactions(state, month, currency), "expense").map(
+    categoryTotals(periodTransactions(state, month, currency), "expense").map(
       (c) => [c.categoryId, c.amount],
     ),
   );

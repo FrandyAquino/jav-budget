@@ -1,5 +1,7 @@
 import { fireEvent, screen, waitFor } from "expo-router/testing-library";
 import { en, enI18n, fixture, renderApp, stored, TODAY } from "./helpers/app";
+import { setSyncStatus } from "@/features/sync/status";
+import { backupNow, cachedBackups, listBackups, readBackup, shareBackup } from "@/features/backup/files";
 
 // In-memory stand-in for the expo-file-system File/Directory API (SDK 58).
 jest.mock("expo-file-system", () => {
@@ -82,13 +84,29 @@ const fs = jest.requireMock("expo-file-system") as {
   __dirs: Set<string>;
 };
 const sharing = jest.requireMock("expo-sharing") as { shareAsync: jest.Mock };
-const FOLDER = "file:///docs/Backups";
+const FOLDER = "file:///docs/Backups/ui-test-user";
 const todayFile = `${FOLDER}/jav-budget-${TODAY}.json`;
 
 beforeEach(() => {
   fs.__files.clear();
   fs.__dirs.clear();
   sharing.shareAsync.mockClear();
+});
+
+test("another account cannot list, restore, or share the previous owner's backups", async () => {
+  await backupNow(fixture());
+  const previous = listBackups()[0];
+  expect(previous).toBeDefined();
+  expect(cachedBackups(100).list).toHaveLength(1);
+  setSyncStatus({ user: { id: "other-user", email: "other@example.test" }, ledgerUserId: "other-user" });
+  expect(cachedBackups(100).list).toEqual([]);
+  expect(listBackups()).toEqual([]);
+  await expect(readBackup(previous)).rejects.toThrow();
+  await expect(shareBackup(previous)).rejects.toThrow();
+  expect(sharing.shareAsync).not.toHaveBeenCalled();
+  setSyncStatus({ user: null, ledgerUserId: null });
+  expect(cachedBackups(100).list).toEqual([]);
+  expect(() => listBackups()).toThrow();
 });
 
 test("Back up now writes today's restorable backup and Share opens it", async () => {

@@ -6,6 +6,7 @@ import { isRouterAction, type RouterAction } from "expo-quick-actions/router";
 import { useFinance } from "@/features/finance/store";
 import { useT } from "@/shared/i18n/react";
 import type { Translate } from "@/shared/i18n/core";
+import { canAccessLedger, useSyncStatus } from "@/features/sync/status";
 
 const ios = Platform.OS === "ios";
 
@@ -49,7 +50,8 @@ export function QuickActionsSync() {
   const { state, ready } = useFinance();
   // No shortcuts until first-run setup is done (an action that still arrives
   // is redirected to onboarding by the protected root Stack).
-  const available = ready && state.settings.onboarded !== false;
+  const account = useSyncStatus();
+  const available = ready && canAccessLedger(account) && state.settings.onboarded !== false;
 
   useEffect(() => {
     void QuickActions.setItems(available ? items(t) : []).catch(() => {});

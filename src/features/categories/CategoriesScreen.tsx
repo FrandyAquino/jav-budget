@@ -56,11 +56,23 @@ export default function CategoriesScreen() {
       }
     >
       <Action onPress={() => setEditing("new")}>{t("categories.add")}</Action>
-      {(["expense", "income"] as const).map((kind) => (
+      {(["expense", "income", "transfer"] as const).map((kind) => (
         <Card key={kind}>
           <Txt size={12} color={colors.muted} style={{ marginBottom: 15 }}>
-            {t(kind === "expense" ? "categories.moneyOut" : "categories.moneyIn")}
+            {t(
+              kind === "expense"
+                ? "categories.moneyOut"
+                : kind === "income"
+                  ? "categories.moneyIn"
+                  : "categories.transfers",
+            )}
           </Txt>
+          {kind === "transfer" &&
+            !state.categories.some((c) => c.kind === kind) && (
+              <Txt size={13} color={colors.muted}>
+                {t("categories.transfersEmpty")}
+              </Txt>
+            )}
           {state.categories
             .filter((c) => c.kind === kind)
             .map((c) => (
@@ -174,6 +186,7 @@ export function CategoryForm({
             items={[
               { value: "expense", label: t("kind.expense") },
               { value: "income", label: t("kind.income") },
+              { value: "transfer", label: t("kind.transfer") },
             ]}
             onChange={setKind}
           />
@@ -232,6 +245,12 @@ export function CategoryForm({
                   color,
                 };
                 await update((s) => {
+                  if (
+                    category &&
+                    category.kind !== kind &&
+                    categoryInUse(s, category.id)
+                  )
+                    throw new Error(t("categoryForm.kindInUse"));
                   if (
                     s.categories.some(
                       (c) =>

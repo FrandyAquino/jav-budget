@@ -7,7 +7,7 @@ import {
   type FinanceState,
   type NetWorth,
 } from "@/features/finance/model";
-import { Amount, Icon, Row, Txt, useTheme } from "@/shared/ui";
+import { Amount, Choice, Icon, Row, Txt, useTheme } from "@/shared/ui";
 import { BalanceChart } from "@/features/insights/charts";
 import { useT } from "@/shared/i18n/react";
 
@@ -17,6 +17,8 @@ const currencies: Currency[] = ["DOP", "USD"];
 // default-currency balance with a gentle prompt to set a rate.
 export function NetWorthHero({
   state,
+  scope,
+  onScopeChange,
   worth,
   range,
   income,
@@ -24,6 +26,9 @@ export function NetWorthHero({
   upcoming,
 }: {
   state: FinanceState;
+  // Set when some accounts are savings; the hero then offers both views.
+  scope?: "available" | "all";
+  onScopeChange: (scope: "available" | "all") => void;
   worth: NetWorth;
   range: DateRange;
   income: number;
@@ -60,7 +65,13 @@ export function NetWorthHero({
       <Row style={{ justifyContent: "space-between" }}>
         <Row style={{ gap: 7 }}>
           <Txt size={12} color={colors.accent}>
-            {t(combined ? "home.hero.netWorth" : "home.hero.totalBalance")}
+            {t(
+              scope === "available"
+                ? "home.hero.available"
+                : combined
+                  ? "home.hero.netWorth"
+                  : "home.hero.totalBalance",
+            )}
           </Txt>
           <Icon name="layers" size={13} color={colors.accent} />
         </Row>
@@ -70,6 +81,18 @@ export function NetWorthHero({
           })}
         </Txt>
       </Row>
+      {scope && (
+        <View style={{ marginVertical: 8 }}>
+          <Choice
+            value={scope}
+            items={[
+              { value: "available", label: t("home.hero.scopeAvailable") },
+              { value: "all", label: t("home.hero.scopeAll") },
+            ]}
+            onChange={onScopeChange}
+          />
+        </View>
+      )}
       <Amount
         value={combined ? worth.total! : worth.byCurrency[currency]}
         currency={currency}

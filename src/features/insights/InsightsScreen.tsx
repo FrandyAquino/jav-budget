@@ -7,8 +7,8 @@ import { View } from "react-native";
 import { useFinance } from "@/features/finance/store";
 import {
   categoryTotals,
-  monthKey,
-  monthTransactions,
+  periodKey,
+  periodTransactions,
   daysInRange,
 } from "@/features/finance/model";
 import { useT } from "@/shared/i18n/react";
@@ -42,14 +42,14 @@ export default function InsightsScreen() {
   const net = summary.income - summary.expense;
   const categories = spendingSlices(state, report.rows);
   const days = daysInRange(report.scope);
-  const thisMonth = monthKey();
+  const thisMonth = periodKey(state.settings.budgetPeriod);
   const budgets = state.budgets.filter(
     (b) => b.month === thisMonth && b.currency === currency,
   );
-  // One split-aware pass over the month instead of a full scan per budget.
+  // One split-aware pass over the budget period instead of a full scan per budget.
   const spentBy = new Map(
     categoryTotals(
-      monthTransactions(state, thisMonth, currency),
+      periodTransactions(state, thisMonth, currency),
       "expense",
     ).map((c) => [c.categoryId, c.amount]),
   );

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { t as tr } from "../../shared/i18n/core.ts";
-import { validDate, validMonth } from "./dates.ts";
+import { validDate, validPeriod } from "./dates.ts";
 import { validRate } from "./money.ts";
 import {
   normalizeTags,
@@ -13,7 +13,7 @@ export const SCHEMA_VERSION = 2;
 const currency = z.enum(["DOP", "USD"]);
 const amount = z.number().int().safe().nonnegative();
 const date = z.string().refine(validDate, "Invalid date");
-const month = z.string().refine(validMonth, "Invalid month");
+const month = z.string().refine(validPeriod, "Invalid month");
 const split = z.object({ categoryId: z.string(), amount: amount.positive() });
 const transaction = z.object({
   id: z.string().min(1),
@@ -55,6 +55,7 @@ const schema = z.object({
       color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
       limit: amount.positive().optional(),
       dueDay: z.number().int().min(1).max(28).optional(),
+      excludeFromTotal: z.boolean().optional(),
     }),
   ),
   categories: z.array(
@@ -63,7 +64,7 @@ const schema = z.object({
       name: z.string().trim().min(1).max(60),
       icon: z.string(),
       color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-      kind: z.enum(["income", "expense"]),
+      kind: z.enum(["income", "expense", "transfer"]),
     }),
   ),
   transactions: z.array(transaction),
@@ -121,6 +122,7 @@ const schema = z.object({
     appearance: z.enum(["system", "light", "dark"]),
     biometrics: z.boolean(),
     notifications: z.boolean(),
+    budgetPeriod: z.enum(["monthly", "biweekly"]).default("monthly"),
     exchangeRate: z
       .object({
         dopPerUsd: z.number().refine(validRate, "Invalid exchange rate"),

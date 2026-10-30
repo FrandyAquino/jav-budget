@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { AppState } from "react-native";
 import { useFinance } from "@/features/finance/store";
 import { runAutoBackup } from "./files";
+import { canAccessLedger, useSyncStatus } from "@/features/sync/status";
 
 // Debounce after writes, so a burst of edits produces one check.
 const DEBOUNCE_MS = 5000;
@@ -10,7 +11,9 @@ const DEBOUNCE_MS = 5000;
 // returns to the foreground. Renders nothing; failures never reach the UI
 // beyond the status line in Settings.
 export function BackupSync() {
-  const { state, ready } = useFinance();
+  const { state, ready: loaded } = useFinance();
+  const account = useSyncStatus();
+  const ready = loaded && canAccessLedger(account);
   const latest = useRef(state);
   useEffect(() => {
     latest.current = state;

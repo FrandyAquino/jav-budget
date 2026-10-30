@@ -5,6 +5,8 @@ import { useEffect, type ComponentType } from "react";
 import * as Sentry from "@sentry/react-native";
 import { ErrorBoundary as RouterErrorBoundary, type ErrorBoundaryProps } from "expo-router";
 
+import { sanitizeErrorEvent } from "./sanitize";
+
 const DSN = process.env.EXPO_PUBLIC_SENTRY_DSN ?? "";
 const enabled = !!DSN && !__DEV__;
 
@@ -15,8 +17,8 @@ if (enabled)
     tracesSampleRate: 0,
     attachScreenshot: false,
     attachViewHierarchy: false,
-    beforeBreadcrumb: (crumb) =>
-      crumb.category === "console" || crumb.category?.startsWith("ui.") ? null : crumb,
+    beforeBreadcrumb: () => null,
+    beforeSend: sanitizeErrorEvent,
   });
 
 // The root layout takes no props.

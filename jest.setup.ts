@@ -75,4 +75,15 @@ jest.spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
 
 beforeEach(async () => {
   await AsyncStorage.clear();
+  await AsyncStorage.setItem("jav-budget:sync:v1", JSON.stringify({
+    outbox: {}, values: { userId: "ui-test-user", bootstrapped: "ui-test-user" },
+  }));
+  // Financial UI suites start as an established account. Auth suites reset
+  // this explicitly and exercise the real gate with their Supabase mock.
+  require("@/features/sync/status").setSyncStatus({
+    configured: true, ready: true,
+    user: { id: "ui-test-user", email: "ui@example.test" },
+    ledgerUserId: "ui-test-user", transitioning: false, phase: "idle", error: null,
+    decision: null, lastSyncedAt: null,
+  });
 });

@@ -18,6 +18,7 @@ import {
   Card,
   Choice,
   Empty,
+  AmountField,
   Field,
   DateField,
   FormError,
@@ -300,7 +301,8 @@ function RecurringForm({
               if (splitting) setParts(defaultParts(v, first));
             }}
           />
-          <Field
+          <AmountField
+            mode={mode}
             label={t("txForm.amountLabel", {
               currency:
                 state.accounts.find((a) => a.id === accountId)?.currency ?? "",
@@ -308,7 +310,6 @@ function RecurringForm({
             accessibilityLabel={t("recurringForm.amountA11y")}
             value={amount}
             onChangeText={setAmount}
-            keyboardType={mode === "cents" ? "number-pad" : "decimal-pad"}
           />
           <SelectField
             label={t("txForm.account")}

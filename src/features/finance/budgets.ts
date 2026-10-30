@@ -1,6 +1,6 @@
 import { t as tr } from "../../shared/i18n/core.ts";
-import { shiftMonth, validMonth } from "./dates.ts";
-import { monthTransactions } from "./reports.ts";
+import { shiftPeriod, validPeriod } from "./dates.ts";
+import { periodTransactions } from "./reports.ts";
 import { categoryAmount, id } from "./transactions.ts";
 import type { Budget, Currency, FinanceState, MonthlyBudget } from "./types.ts";
 
@@ -8,7 +8,7 @@ export function spent(
   state: FinanceState,
   budget: Pick<Budget, "categoryId" | "currency" | "month">,
 ) {
-  return monthTransactions(state, budget.month, budget.currency)
+  return periodTransactions(state, budget.month, budget.currency)
     .filter((t) => t.kind === "expense")
     .reduce((v, t) => v + categoryAmount(t, budget.categoryId), 0);
 }
@@ -17,14 +17,14 @@ export function monthSpent(
   month: string,
   currency: Currency,
 ) {
-  return monthTransactions(state, month, currency)
+  return periodTransactions(state, month, currency)
     .filter((t) => t.kind === "expense")
     .reduce((v, t) => v + t.amount, 0);
 }
 export type BudgetStatus = {
   limit: number;
   spent: number;
-  // Previous month's remaining (limit - spent, may be negative); one month back, never chained.
+  // Previous period's remaining (limit - spent, may be negative); one period back, never chained.
   carried: number;
   available: number;
   // spent / (limit + carried); can exceed 1. 1 when nothing is available but something was spent.
@@ -43,7 +43,7 @@ function status(limit: number, used: number, carried: number): BudgetStatus {
   };
 }
 export function previousBudget(state: FinanceState, budget: Budget) {
-  const month = shiftMonth(budget.month, -1);
+  const month = shiftPeriod(budget.month, -1);
   return state.budgets.find(
     (b) =>
       b.month === month &&
@@ -100,7 +100,7 @@ export function setMonthlyBudget(
   currency: Currency,
   limit: number | null,
 ): FinanceState {
-  if (!validMonth(month)) throw new Error(tr("errors.monthInvalid"));
+  if (!validPeriod(month)) throw new Error(tr("errors.monthInvalid"));
   const existing = monthlyBudget(state, month, currency);
   const rest = state.monthlyBudgets.filter((b) => b !== existing);
   if (limit === null) return { ...state, monthlyBudgets: rest };
@@ -120,7 +120,7 @@ export function copyBudgets(
   fromMonth: string,
   toMonth: string,
 ): { state: FinanceState; copied: number } {
-  if (!validMonth(fromMonth) || !validMonth(toMonth))
+  if (!validPeriod(fromMonth) || !validPeriod(toMonth))
     throw new Error(tr("errors.monthInvalid"));
   if (fromMonth === toMonth) return { state, copied: 0 };
   const budgets = state.budgets

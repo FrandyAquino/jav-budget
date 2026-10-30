@@ -1,9 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { act, screen } from "expo-router/testing-library";
+import { act, screen, waitFor } from "expo-router/testing-library";
 import { en, fixture, renderApp, stored, TODAY } from "./helpers/app";
 import { client, meta, records, server, USER, VALID_CODE } from "./helpers/supabase-mock";
 import { setSyncStatus } from "@/features/sync/status";
-import { whenIdle } from "@/features/sync/engine";
+import { requestSync, signOut, whenIdle } from "@/features/sync/engine";
 
 jest.mock("@/features/sync/config", () => ({
   SUPABASE_URL: "https://example.supabase.co",
@@ -14,18 +14,129 @@ jest.mock("@/features/sync/config", () => ({
 jest.mock("@/features/sync/supabase", () => ({
   getSupabase: () => jest.requireActual("./helpers/supabase-mock").client,
 }));
+jest.mock("@/features/sync/auth-verifier", () => ({
+  createAuthVerifier: () => jest.requireActual("./helpers/supabase-mock").client,
+}));
+
+jest.mock("@/features/sync/google-auth", () => ({
+  hasGoogleCallback: () => false,
+  finishGoogleSignIn: async () => {},
+  beginGoogleSignIn: jest.fn(async () => {
+    const { client } = jest.requireActual("./helpers/supabase-mock");
+    await client.auth.setSession({ access_token: "token", refresh_token: "refresh" });
+    return true;
+  }),
+}));
 
 const SYNC_KEY = "jav-budget:sync:v1";
 // Lets the background sync work finish (inside act).
 const settled = () => act(() => whenIdle());
-beforeEach(() => {
+beforeEach(async () => {
+  await AsyncStorage.removeItem(SYNC_KEY);
   server.reset();
-  setSyncStatus({ ready: false, user: null, phase: "idle", error: null, lastSyncedAt: null, decision: null });
+  setSyncStatus({ ready: false, user: null, ledgerUserId: null, phase: "idle", error: null, lastSyncedAt: null, decision: null });
+});
+
+test("a signed-out deep link cannot reveal retained financial data", async () => {
+  await renderApp("/activity", fixture());
+  expect(await screen.findByLabelText(en("account.emailA11y"))).toBeOnTheScreen();
+  expect(screen.queryByText("Coffee beans")).not.toBeOnTheScreen();
+  expect(screen.queryByRole("tab", { name: en("tabs.home") })).not.toBeOnTheScreen();
+  expect((await stored()).transactions).toHaveLength(3);
+});
+
+test("the default-provider email link signs in without navigating to its redirect", async () => {
+  const { user } = await renderApp("/settings", fixture());
+  await user.type(await screen.findByLabelText(en("account.emailA11y")), "ana@example.com");
+  await user.press(screen.getByRole("button", { name: en("account.sendCode") }));
+  await user.type(await screen.findByLabelText(en("account.codeA11y")), "https://example.supabase.co/auth/v1/verify?token=valid-hash&type=magiclink&redirect_to=http://localhost:3000");
+  await user.press(screen.getByRole("button", { name: en("account.verify") }));
+  await settled();
+  expect(client.auth.verifyOtp).toHaveBeenLastCalledWith({ token_hash: "valid-hash", type: "email" });
+  expect(await screen.findByText(en("account.signedInAs", { email: USER.email }))).toBeOnTheScreen();
+});
+
+test("a valid link for a different email never publishes a session or uploads the ledger", async () => {
+  const { user } = await renderApp("/settings", fixture());
+  await user.type(await screen.findByLabelText(en("account.emailA11y")), "victim@example.com");
+  await user.press(screen.getByRole("button", { name: en("account.sendCode") }));
+  await user.type(await screen.findByLabelText(en("account.codeA11y")), "https://example.supabase.co/auth/v1/verify?token=valid-hash&type=magiclink");
+  await user.press(screen.getByRole("button", { name: en("account.verify") }));
+  await settled();
+  expect(await screen.findByText(en("auth.error.invalidCode"))).toBeOnTheScreen();
+  expect(client.auth.setSession).not.toHaveBeenCalled();
+  expect(server.session).toBeNull();
+  expect(records()).toEqual([]);
+  expect(screen.queryByRole("tab", { name: en("tabs.home") })).not.toBeOnTheScreen();
+});
+
+test("an auth failure locks the retained ledger instead of treating it as offline", async () => {
+  server.signIn();
+  await AsyncStorage.setItem(SYNC_KEY, JSON.stringify({
+    outbox: {}, values: { userId: USER.id, bootstrapped: USER.id },
+  }));
+  await renderApp("/activity", fixture());
+  await settled();
+  expect(await screen.findByText("Coffee beans")).toBeOnTheScreen();
+  const original = client.from;
+  client.from = () => { throw Object.assign(new Error("JWT expired"), { status: 401 }); };
+  try {
+    await act(() => requestSync());
+    expect(screen.queryByText("Coffee beans")).not.toBeOnTheScreen();
+    expect(screen.queryByRole("tab", { name: en("tabs.home") })).not.toBeOnTheScreen();
+    expect((await stored()).transactions).toHaveLength(3);
+  } finally { client.from = original; }
+});
+
+test("sign-out hides retained data and a different account cannot open it", async () => {
+  server.signIn();
+  await AsyncStorage.setItem(SYNC_KEY, JSON.stringify({
+    outbox: {}, values: { userId: USER.id, bootstrapped: USER.id },
+  }));
+  await renderApp("/activity", fixture());
+  await settled();
+  expect(await screen.findByText("Coffee beans")).toBeOnTheScreen();
+  await act(() => signOut("keep"));
+  expect(await screen.findByLabelText(en("account.emailA11y"))).toBeOnTheScreen();
+  expect(screen.queryByText("Coffee beans")).not.toBeOnTheScreen();
+  expect((await stored()).transactions).toHaveLength(3);
+
+  server.session = { access_token: "other-token", refresh_token: "other-refresh", user: { id: "user-2", email: "bea@example.com" } };
+  await act(() => requestSync());
+  expect(await screen.findByText(en("sync.switch.title"))).toBeOnTheScreen();
+  expect(screen.queryByText("Coffee beans")).not.toBeOnTheScreen();
+  expect(screen.queryByRole("tab", { name: en("tabs.home") })).not.toBeOnTheScreen();
+  expect(records().filter((r) => r.user_id === "user-2")).toEqual([]);
+});
+
+test("missing cloud configuration fails closed", async () => {
+  setSyncStatus({ configured: false });
+  await renderApp("/settings", fixture());
+  expect(await screen.findByText(en("auth.unavailable"))).toBeOnTheScreen();
+  expect(screen.queryByText(en("backup.auto"))).not.toBeOnTheScreen();
+  setSyncStatus({ configured: true });
+});
+
+test("an existing owner can open the local ledger when cloud requests fail", async () => {
+  server.signIn();
+  await AsyncStorage.setItem(SYNC_KEY, JSON.stringify({
+    outbox: {}, values: { userId: USER.id, bootstrapped: USER.id },
+  }));
+  const original = client.from;
+  client.from = () => { throw new Error("Network offline"); };
+  try {
+    await renderApp("/activity", fixture());
+    await settled();
+    expect(await screen.findByText("Coffee beans")).toBeOnTheScreen();
+    await waitFor(() => expect(screen.getByRole("tab", { name: en("tabs.home") })).toBeOnTheScreen());
+  } finally {
+    client.from = original;
+  }
 });
 
 test("signing in with an email code uploads this device's data", async () => {
   const { user } = await renderApp("/settings");
-  expect(await screen.findByText(en("account.title"))).toBeOnTheScreen();
+  expect(await screen.findByText(en("auth.welcome"))).toBeOnTheScreen();
 
   await user.type(await screen.findByLabelText(en("account.emailA11y")), "ana@example.com");
   await user.press(screen.getByRole("button", { name: en("account.sendCode") }));
@@ -35,7 +146,7 @@ test("signing in with an email code uploads this device's data", async () => {
   });
   expect(await screen.findByText(en("account.codeSent", { email: "ana@example.com" }))).toBeOnTheScreen();
   // Resend waits for the cooldown.
-  expect(screen.getByRole("button", { name: /^Resend code in \d+ s$/ })).toBeDisabled();
+  expect(screen.getByRole("button", { name: /^Resend email in \d+ s$/ })).toBeDisabled();
 
   // A wrong or expired code shows a clear error.
   await user.type(screen.getByLabelText(en("account.codeA11y")), "000000");
@@ -53,7 +164,7 @@ test("signing in with an email code uploads this device's data", async () => {
   expect(records().map((r) => r.id)).toEqual(expect.arrayContaining(["t-beans", "t-dinner", "t-pay", "main"]));
   expect(records().every((r) => r.user_id === USER.id)).toBe(true);
   expect(meta().map((m) => m.key).sort()).toEqual(
-    ["settings_currency", "settings_email", "settings_exchangeRate", "settings_name", "settings_numberEntry"].sort(),
+    ["settings_budgetPeriod", "settings_currency", "settings_email", "settings_exchangeRate", "settings_name", "settings_numberEntry"].sort(),
   );
   expect(await screen.findByText(new RegExp(`^${en("account.status.idle")} · `))).toBeOnTheScreen();
   const local = JSON.parse((await AsyncStorage.getItem(SYNC_KEY)) ?? "{}");
@@ -145,8 +256,22 @@ test("deleting the account removes cloud data and keeps this device's copy", asy
   expect(records()).toEqual([]);
   expect(meta()).toEqual([]);
   expect(await screen.findByLabelText(en("account.emailA11y"))).toBeOnTheScreen();
-  // The device keeps its data, no longer linked to the deleted account.
+  // Retained data stays attributed to its deleted owner, never to the next login.
   expect((await stored()).transactions.map((t) => t.id)).toContain("t-beans");
   const local = JSON.parse((await AsyncStorage.getItem(SYNC_KEY)) ?? "{}");
-  expect(local.values ?? {}).toEqual({});
+  expect(local.values).toEqual({ userId: USER.id });
+});
+
+
+test("Google sign-in uses the same account gate and first-sync ownership rules", async () => {
+  await AsyncStorage.setItem(SYNC_KEY, JSON.stringify({
+    values: { userId: "previous-owner", bootstrapped: "previous-owner" }, outbox: {},
+  }));
+  const { user } = await renderApp("/settings", fixture());
+  await user.press(await screen.findByRole("button", { name: en("account.google") }));
+  await settled();
+  expect(screen.queryByText("Coffee beans")).not.toBeOnTheScreen();
+  expect(screen.queryByRole("tab", { name: en("tabs.home") })).not.toBeOnTheScreen();
+  expect(records()).toEqual([]);
+  expect((await stored()).transactions).toHaveLength(3);
 });

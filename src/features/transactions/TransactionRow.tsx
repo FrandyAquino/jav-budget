@@ -28,7 +28,9 @@ export function TransactionRow({
   const parts = transaction.splits?.length ?? 0;
   const tags = transaction.tags ?? [];
   const label = transfer
-    ? t("kind.transfer")
+    ? category
+      ? `${t("kind.transfer")} · ${category.name}`
+      : t("kind.transfer")
     : parts > 1
       ? t("transaction.splitLabel", { count: parts })
       : category?.name;

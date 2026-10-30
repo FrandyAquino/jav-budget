@@ -22,3 +22,4 @@ export function deleteReceipt(uri?: string) {
 export function sweepReceipts(_state: unknown) {}
 
 export const receiptsPersist = false;
+export function clearReceiptCache() {}

@@ -7,6 +7,7 @@ import { useState } from "react";
 import { View } from "react-native";
 import { useFinance } from "@/features/finance/store";
 import {
+  availableState,
   netWorth,
   type Kind,
   type Transaction,
@@ -48,7 +49,12 @@ export default function HomeScreen() {
   const [fresh, setFresh] = useState(false);
   const [editing, setEditing] = useState<Transaction>();
   const currency = state.settings.currency;
-  const worth = netWorth(state, currency);
+  // Savings accounts can be left out of the hero; "all" shows every account.
+  const [scope, setScope] = useState<"available" | "all">("available");
+  const hasSavings = state.accounts.some((a) => a.excludeFromTotal);
+  const heroState =
+    hasSavings && scope === "available" ? availableState(state) : state;
+  const worth = netWorth(heroState, currency);
   return (
     <Screen
       title={
@@ -76,7 +82,9 @@ export default function HomeScreen() {
         {[
           <View key="main" style={{ gap: 24 }}>
             <NetWorthHero
-              state={state}
+              state={heroState}
+              scope={hasSavings ? scope : undefined}
+              onScopeChange={setScope}
               worth={worth}
               range={period.range}
               income={report.income}

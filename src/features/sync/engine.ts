@@ -7,8 +7,9 @@ import { emptyState, type FinanceState } from "@/features/finance/model";
 import { parseState } from "@/features/finance/schema";
 import { syncTransact, transact } from "@/features/finance/storage/backend";
 import type { SyncLocal, SyncPatch } from "@/features/finance/storage/shared";
+import { LedgerOwnerChangedError, requireLedgerOwner } from "@/features/finance/storage/shared";
 import { hasRealData } from "@/features/backup/policy";
-import { sweepReceipts } from "@/features/transactions/receipts";
+import { clearReceiptCache, sweepReceipts } from "@/features/transactions/receipts";
 import {
   acknowledged,
   afterCursor,
@@ -26,7 +27,10 @@ import {
   type MetaRow,
   type RecordRow,
 } from "./core";
-import { RECEIPTS_BUCKET } from "./config";
+import { RECEIPTS_BUCKET, SUPABASE_URL } from "./config";
+import { emailLinkToken } from "./email-link";
+import { beginGoogleSignIn, finishGoogleSignIn, hasGoogleCallback } from "./google-auth";
+import { createAuthVerifier } from "./auth-verifier";
 import { getSupabase } from "./supabase";
 import {
   downloadReceipt,
@@ -35,9 +39,10 @@ import {
   receiptUrl,
   uploadReceipt,
 } from "./receipt-files";
-import { getSyncStatus, setSyncStatus, type SyncErrorCode } from "./status";
+import { canAccessLedger, getSyncStatus, setSyncStatus, type SyncErrorCode } from "./status";
 
 const PAGE = 1000;
+const receiptDownloads = new Set<Promise<unknown>>();
 const RECORD_COLUMNS = "collection,id,data,position,deleted,client_updated_at,server_updated_at";
 
 // Persisted values (SyncLocal.values).
@@ -61,9 +66,14 @@ const json = <T,>(raw: string | undefined, fallback: T): T => {
 const read = () =>
   syncTransact((base, local) => ({ result: { base, local } }));
 const patch = (p: SyncPatch) => syncTransact(() => ({ patch: p, result: undefined }));
+const patchOwned = (user: string, p: SyncPatch) => syncTransact((_base, local) => {
+  requireLedgerOwner(local, user);
+  return { patch: p, result: undefined };
+});
 
 async function currentSession(client: SupabaseClient): Promise<Session | null> {
-  const { data } = await client.auth.getSession();
+  const { data, error } = await client.auth.getSession();
+  if (error) throw error;
   return data.session;
 }
 function errorCode(error: unknown): SyncErrorCode {
@@ -85,7 +95,7 @@ const onboardedIfData = (state: FinanceState) =>
     : state;
 
 // --- Auth ----------------------------------------------------------------
-export type AuthErrorCode = "invalidEmail" | "invalidCode" | "rateLimited" | "offline" | "failed";
+export type AuthErrorCode = "invalidEmail" | "invalidCode" | "rateLimited" | "emailNotAllowed" | "offline" | "failed";
 export class SyncAuthError extends Error {
   constructor(readonly code: AuthErrorCode) {
     super(code);
@@ -94,6 +104,7 @@ export class SyncAuthError extends Error {
 function authError(error: unknown, verifying: boolean): SyncAuthError {
   const code = (error as { code?: string })?.code ?? "";
   const status = (error as { status?: number })?.status;
+  if (code === "email_address_not_authorized") return new SyncAuthError("emailNotAllowed");
   if (code.includes("rate_limit") || status === 429) return new SyncAuthError("rateLimited");
   if (verifying && (code === "otp_expired" || status === 403 || status === 401))
     return new SyncAuthError("invalidCode");
@@ -119,27 +130,57 @@ export async function sendCode(email: string) {
 export async function verifyCode(email: string, token: string) {
   const client = getSupabase();
   if (!client) throw new SyncAuthError("failed");
-  if (!/^\d{6}$/.test(token.trim())) throw new SyncAuthError("invalidCode");
-  let session: Session | null = null;
+  const code = token.trim();
+  const hash = /^\d{6}$/.test(code) ? null : emailLinkToken(code, SUPABASE_URL);
+  if (!/^\d{6}$/.test(code) && !hash) throw new SyncAuthError("invalidCode");
+  if (!validEmail(email) || getSyncStatus().transitioning) throw new SyncAuthError("failed");
+  setSyncStatus({ transitioning: true });
   try {
-    const { data, error } = await client.auth.verifyOtp({
-      email: email.trim(),
-      token: token.trim(),
-      type: "email",
-    });
+    await running;
+    const verifier = createAuthVerifier();
+    const { data, error } = await verifier.auth.verifyOtp(hash
+      ? { token_hash: hash, type: "email" }
+      : { email: email.trim(), token: code, type: "email" });
     if (error) throw error;
-    session = data.session;
+    if (!data.session || data.session.user.email?.toLowerCase() !== email.trim().toLowerCase())
+      throw new SyncAuthError("invalidCode");
+    const accepted = await client.auth.setSession({
+      access_token: data.session.access_token, refresh_token: data.session.refresh_token,
+    });
+    if (accepted.error) throw accepted.error;
+    if (!accepted.data.session) throw new SyncAuthError("failed");
+    setUser(accepted.data.session);
   } catch (error) {
     throw error instanceof SyncAuthError ? error : authError(error, true);
+  } finally {
+    setSyncStatus({ transitioning: false });
   }
-  if (session) setUser(session);
   void requestSync();
 }
+export async function signInWithGoogle(): Promise<boolean> {
+  const client = getSupabase();
+  if (!client || getSyncStatus().transitioning) throw new SyncAuthError("failed");
+  setSyncStatus({ transitioning: true, error: null });
+  try {
+    await running;
+    const completed = await beginGoogleSignIn(client);
+    if (completed) setUser(await currentSession(client));
+    return completed;
+  } catch (error) {
+    throw authError(error, false);
+  } finally {
+    setSyncStatus({ transitioning: false });
+    void requestSync();
+  }
+}
+
 function setUser(session: Session | null) {
+  const changed = getSyncStatus().user?.id !== session?.user.id;
   setSyncStatus({
     ready: true,
     user: session ? { id: session.user.id, email: session.user.email ?? "" } : null,
-    ...(session ? {} : { phase: "idle", error: null, decision: null }),
+    ...(!session || changed ? { ledgerUserId: null, lastSyncedAt: null } : {}),
+    ...(!session || changed ? { phase: "idle", error: null, decision: null } : {}),
   });
 }
 
@@ -179,6 +220,7 @@ async function push(client: SupabaseClient, user: string) {
   // A few rounds at most: changes made while pushing go out in the next one.
   for (let round = 0; round < 5; round++) {
     const { base, local } = await read();
+    requireLedgerOwner(local, user);
     if (!base || base.demo) return;
     const batches = buildPush(base, local.outbox);
     if (!batches.length) return;
@@ -199,10 +241,10 @@ async function push(client: SupabaseClient, user: string) {
           });
         if (error) throw error;
       }
-      await syncTransact((_, current) => ({
-        patch: { removeOutbox: acknowledged(current.outbox, batch) },
-        result: undefined,
-      }));
+      await syncTransact((_, current) => {
+        requireLedgerOwner(current, user);
+        return { patch: { removeOutbox: acknowledged(current.outbox, batch) }, result: undefined };
+      });
     }
   }
 }
@@ -215,6 +257,7 @@ async function pull(client: SupabaseClient, user: string, from: Cursor | null) {
     const pageMeta = first ? meta : [];
     first = false;
     const stop = await syncTransact((base, local) => {
+      requireLedgerOwner(local, user);
       if (!base || base.demo) return { result: true };
       const parked = json<RecordRow[]>(values(local).parked, []);
       const result = applyRemote(base, [...parked, ...rows], pageMeta, local.outbox);
@@ -242,6 +285,7 @@ const attempted = new Set<string>();
 async function syncReceipts(client: SupabaseClient, user: string) {
   if (!receiptSyncSupported) return;
   const { base, local } = await read();
+  requireLedgerOwner(local, user);
   if (!base || base.demo) return;
   const cloud = new Set(json<string[]>(values(local).receipts, []));
   const plan = planReceipts(base, { cloud: [...cloud] }, receiptExists);
@@ -252,8 +296,8 @@ async function syncReceipts(client: SupabaseClient, user: string) {
     } catch {
       // Retried on the next cycle.
     }
-  for (const name of plan.download.filter((n) => !attempted.has(n)).slice(0, 10)) {
-    attempted.add(name);
+  for (const name of plan.download.filter((n) => !attempted.has(`${user}/${n}`)).slice(0, 10)) {
+    attempted.add(`${user}/${name}`);
     try {
       await downloadReceipt(client, user, name);
       cloud.add(name);
@@ -267,7 +311,7 @@ async function syncReceipts(client: SupabaseClient, user: string) {
       .remove(plan.remove.map((name) => `${user}/${name}`));
     if (!error) for (const name of plan.remove) cloud.delete(name);
   }
-  await patch({ values: { receipts: JSON.stringify([...cloud]) } });
+  await patchOwned(user, { values: { receipts: JSON.stringify([...cloud]) } });
 }
 
 // --- First sync -----------------------------------------------------------
@@ -283,6 +327,12 @@ async function bootstrap(client: SupabaseClient, user: string, mode: Bootstrap) 
       after = lastCursor(page, after);
     }
     const now = new Date().toISOString();
+    const { local: previous } = await read();
+    if (values(previous).userId && values(previous).userId !== user) {
+      await Promise.allSettled([...receiptDownloads]);
+      // Equal filenames in different accounts must never reuse the old photo.
+      clearReceiptCache();
+    }
     const replaced = await syncTransact((base) => {
       const fresh = keepDeviceSettings(emptyState(), base);
       const result = applyRemote(fresh, rows, meta, {});
@@ -313,8 +363,14 @@ async function bootstrap(client: SupabaseClient, user: string, mode: Bootstrap) 
   // Seed the outbox: a merge (or pull into an empty device) lets the cloud
   // copy win conflicts (epoch); uploading into an empty cloud uses now.
   const at = mode === "push" ? new Date().toISOString() : EPOCH;
+  const { local: previous } = await read();
+  if (values(previous).userId && values(previous).userId !== user) {
+    await Promise.allSettled([...receiptDownloads]);
+    clearReceiptCache();
+  }
   await syncTransact((base, local) => {
     const switched = values(local).userId !== undefined && values(local).userId !== user;
+    if (switched && base && localKind(base) === "data") throw new LedgerOwnerChangedError();
     const outbox = switched ? {} : local.outbox;
     return {
       patch: {
@@ -328,7 +384,7 @@ async function bootstrap(client: SupabaseClient, user: string, mode: Bootstrap) 
   });
   await push(client, user);
   await pull(client, user, null);
-  await patch({ values: { bootstrapped: user } });
+  await patchOwned(user, { values: { bootstrapped: user } });
   await syncReceipts(client, user);
 }
 
@@ -338,10 +394,12 @@ async function cycle(client: SupabaseClient, session: Session) {
   const { base, local } = await read();
   if (!base) return; // the ledger hasn't loaded yet
   const v = values(local);
+  // This check is local, so the existing owner can work during network outages.
+  setSyncStatus({ ledgerUserId: v.userId === user && v.bootstrapped === user ? user : null });
   if (base.demo) {
     // Sample data never syncs; leaving it re-runs the first sync.
     if (v.bootstrapped === user) await patch({ values: { bootstrapped: null, cursor: null, parked: null } });
-    if (v.keepDemo === user) return setSyncStatus({ phase: "paused", decision: null });
+    if (v.keepDemo === user) return setSyncStatus({ phase: "paused", decision: null, ledgerUserId: user });
     const remote = await remoteHasData(client, user);
     return setSyncStatus({ phase: "paused", decision: { kind: "demo", remoteHasData: remote } });
   }
@@ -359,8 +417,9 @@ async function cycle(client: SupabaseClient, session: Session) {
     await syncReceipts(client, user);
   }
   const now = new Date().toISOString();
-  await patch({ values: { lastSyncedAt: now } });
+  await patchOwned(user, { values: { lastSyncedAt: now } });
   setSyncStatus({ phase: "idle", error: null, decision: null, lastSyncedAt: now });
+  if (getSyncStatus().user?.id === user) setSyncStatus({ ledgerUserId: user });
 }
 
 let running: Promise<void> | null = null;
@@ -377,6 +436,7 @@ export async function whenIdle() {
 }
 // Runs a sync cycle now (or right after the one in progress). Never throws.
 export function requestSync(): Promise<void> {
+  if (getSyncStatus().transitioning) return Promise.resolve();
   if (running) {
     again = true;
     return running;
@@ -395,9 +455,11 @@ export function requestSync(): Promise<void> {
         setSyncStatus({ phase: "syncing" });
         await cycle(client, session);
       } catch (error) {
+        if (error instanceof LedgerOwnerChangedError || errorCode(error) === "auth")
+          setSyncStatus({ ledgerUserId: null });
         setSyncStatus({ phase: "error", error: errorCode(error) });
       }
-    } while (again);
+    } while (again && !getSyncStatus().transitioning);
   })()).finally(() => {
     running = null;
   });
@@ -407,27 +469,41 @@ export function requestSync(): Promise<void> {
 export type DecisionChoice = "merge" | "replace" | "keepDemo" | "cancel";
 // Answers the pending first-sync question (SyncStatus.decision).
 export function resolveDecision(choice: DecisionChoice) {
-  return track(decide(choice));
+  return transition(() => decide(choice));
+}
+function transition(work: () => Promise<void>): Promise<void> {
+  if (getSyncStatus().transitioning) return Promise.resolve();
+  setSyncStatus({ transitioning: true });
+  return track(work().catch((error) => {
+    setSyncStatus({ phase: "error", error: errorCode(error) });
+  }).finally(() => setSyncStatus({ transitioning: false })));
 }
 async function decide(choice: DecisionChoice) {
   const client = getSupabase();
   const decision = getSyncStatus().decision;
   if (!client || !decision) return;
-  if (choice === "cancel") return signOut("keep");
+  if (choice === "cancel") return leave("keep");
+  if (choice === "merge" && decision.kind !== "merge") return;
+  if (choice === "keepDemo" && decision.kind !== "demo") return;
   const session = await currentSession(client);
   if (!session) return setUser(null);
+  if (session.user.id !== getSyncStatus().user?.id) {
+    setUser(session);
+    return;
+  }
   const user = session.user.id;
   if (choice === "keepDemo") {
     await patch({ values: { keepDemo: user } });
-    return setSyncStatus({ decision: null, phase: "paused" });
+    return setSyncStatus({ decision: null, phase: "paused", ledgerUserId: user });
   }
   await running;
   setSyncStatus({ decision: null, phase: "syncing", error: null });
   try {
     await bootstrap(client, user, choice === "merge" ? "merge" : "replace");
     const now = new Date().toISOString();
-    await patch({ values: { lastSyncedAt: now } });
+    await patchOwned(user, { values: { lastSyncedAt: now } });
     setSyncStatus({ phase: "idle", lastSyncedAt: now });
+    if (getSyncStatus().user?.id === user) setSyncStatus({ ledgerUserId: user });
   } catch (error) {
     setSyncStatus({ phase: "error", error: errorCode(error) });
   }
@@ -436,7 +512,7 @@ async function decide(choice: DecisionChoice) {
 // keep: this device keeps its data (and resumes with the same account later).
 // erase: this device's copy is erased (the cloud copy stays) -> onboarding.
 export function signOut(mode: "keep" | "erase") {
-  return track(leave(mode));
+  return transition(() => leave(mode));
 }
 async function leave(mode: "keep" | "erase") {
   const client = getSupabase();
@@ -450,13 +526,16 @@ async function leave(mode: "keep" | "erase") {
       await push(client, session.user.id).catch(() => {});
   }
   // Local scope: other devices stay signed in.
-  await client.auth.signOut({ scope: "local" }).catch(() => {});
+  const { error } = await client.auth.signOut({ scope: "local" });
+  if (error) throw error;
   if (mode === "erase") await eraseDevice();
   setUser(null);
   setSyncStatus({ lastSyncedAt: mode === "erase" ? null : getSyncStatus().lastSyncedAt });
 }
 // Same as Settings -> erase: empty data with this device's preferences.
 async function eraseDevice() {
+  await Promise.allSettled([...receiptDownloads]);
+  clearReceiptCache();
   await transact((base) => parseState(keepDeviceSettings(emptyState(), base)), {
     record: false,
   });
@@ -469,7 +548,12 @@ async function eraseDevice() {
 // keep: this device keeps its data, unlinked from any account.
 // Resolves to null on success; on failure nothing on the device changes.
 export function deleteAccount(mode: "keep" | "erase"): Promise<SyncErrorCode | null> {
-  return track(removeAccount(mode));
+  if (getSyncStatus().transitioning) return Promise.resolve("server");
+  setSyncStatus({ transitioning: true });
+  return track(removeAccount(mode).catch(errorCode).then((error) => {
+    if (error) setSyncStatus({ phase: "error", error });
+    return error;
+  }).finally(() => setSyncStatus({ transitioning: false })));
 }
 async function removeAccount(mode: "keep" | "erase"): Promise<SyncErrorCode | null> {
   const client = getSupabase();
@@ -497,7 +581,11 @@ async function removeAccount(mode: "keep" | "erase"): Promise<SyncErrorCode | nu
     return errorCode(error);
   }
   if (mode === "erase") await eraseDevice();
-  else await patch({ clearOutbox: true, clearValues: true });
+  // Retained data must never become unowned and upload to a new account.
+  else {
+    const { local } = await read();
+    await patch({ clearOutbox: true, clearValues: true, values: { userId: values(local).userId ?? null } });
+  }
   setUser(null);
   setSyncStatus({ lastSyncedAt: null });
   return null;
@@ -510,10 +598,26 @@ export function startSync(): () => void {
   void read()
     .then(({ local }) => setSyncStatus({ lastSyncedAt: values(local).lastSyncedAt ?? null }))
     .catch(() => {});
+  let completingGoogle = hasGoogleCallback();
+  if (completingGoogle) {
+    setSyncStatus({ transitioning: true });
+    void finishGoogleSignIn(client)
+      .then(async () => {
+        setUser(await currentSession(client));
+        completingGoogle = false;
+        setSyncStatus({ transitioning: false });
+        void requestSync();
+      })
+      .catch(() => {
+        completingGoogle = false;
+        setSyncStatus({ ready: true, transitioning: false, error: "auth", ledgerUserId: null });
+      });
+  }
   const { data } = client.auth.onAuthStateChange((event, session) => {
     // Don't await other Supabase calls inside the callback (it runs while
     // auth holds its lock); continue after it returns.
     void Promise.resolve().then(() => {
+      if (completingGoogle) return;
       setUser(session);
       if (session && (event === "INITIAL_SESSION" || event === "SIGNED_IN")) void requestSync();
     });
@@ -534,19 +638,26 @@ export async function backgroundSync(timeoutMs = 25_000) {
 }
 
 // Lazy receipt download when viewing one (native), or a signed URL (web).
-export async function fetchReceipt(name: string): Promise<{ downloaded?: boolean; url?: string }> {
+export function fetchReceipt(name: string): Promise<{ downloaded?: boolean; url?: string }> {
+  if (!canAccessLedger()) return Promise.resolve({});
+  const work = loadReceipt(name).finally(() => receiptDownloads.delete(work));
+  receiptDownloads.add(work);
+  return work;
+}
+async function loadReceipt(name: string): Promise<{ downloaded?: boolean; url?: string }> {
   const client = getSupabase();
   if (!client) return {};
   const session = await currentSession(client).catch(() => null);
   if (!session) return {};
   const user = session.user.id;
+  if (user !== getSyncStatus().user?.id || !canAccessLedger()) return {};
   if (!receiptSyncSupported) return { url: await receiptUrl(client, user, name).catch(() => undefined) };
   try {
     await downloadReceipt(client, user, name);
     const { local } = await read();
     const cloud = new Set(json<string[]>(values(local).receipts, []));
     cloud.add(name);
-    await patch({ values: { receipts: JSON.stringify([...cloud]) } });
+    await patchOwned(user, { values: { receipts: JSON.stringify([...cloud]) } });
     return { downloaded: true };
   } catch {
     return {};

@@ -2,7 +2,13 @@ import { Input } from "panelui-native/components/input";
 import { DatePicker } from "panelui-native/components/date-picker";
 import type { ComponentProps } from "react";
 import { Pressable, View } from "react-native";
-import { dateString, validDate } from "@/features/finance/model";
+import {
+  dateString,
+  formatAmountInput,
+  parseAmountInput,
+  validDate,
+  type Settings,
+} from "@/features/finance/model";
 import { useT } from "@/shared/i18n/react";
 import { Icon, Txt } from "./text";
 import { useTheme } from "./theme";
@@ -16,6 +22,28 @@ export function Field(props: ComponentProps<typeof Input>) {
         { color: colors.text, backgroundColor: colors.input, borderRadius: 12 },
         props.style,
       ]}
+    />
+  );
+}
+// Money input: shows the amount grouped as it is typed while `value` and
+// `onChangeText` keep the canonical text entryAmount parses.
+export function AmountField({
+  mode,
+  value,
+  onChangeText,
+  ...props
+}: Omit<ComponentProps<typeof Input>, "keyboardType"> & {
+  mode: Settings["numberEntry"];
+  value: string;
+  onChangeText: (raw: string) => void;
+}) {
+  return (
+    <Field
+      {...props}
+      value={formatAmountInput(value, mode)}
+      onChangeText={(text) => onChangeText(parseAmountInput(text, mode))}
+      keyboardType={mode === "cents" ? "number-pad" : "decimal-pad"}
+      inputMode={mode === "cents" ? "numeric" : "decimal"}
     />
   );
 }

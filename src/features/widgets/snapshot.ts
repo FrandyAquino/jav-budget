@@ -1,11 +1,14 @@
 import {
+  availableState,
+  isHalfPeriod,
   money,
-  monthKey,
   monthSpent,
   monthlyBudget,
   monthlyBudgetStatus,
   netWorth,
-  shiftMonth,
+  periodKey,
+  periodRange,
+  shiftPeriod,
   type FinanceState,
 } from "@/features/finance/model";
 import { t } from "@/shared/i18n/core";
@@ -28,12 +31,19 @@ export type BudgetWidgetProps = {
 
 export function widgetSnapshot(
   state: FinanceState,
-  month = monthKey(),
+  month = periodKey(state.settings.budgetPeriod),
 ): BudgetWidgetProps {
+  const title = isHalfPeriod(month)
+    ? state.demo
+      ? "widget.thisPeriodDemo"
+      : "widget.thisPeriod"
+    : state.demo
+      ? "widget.thisMonthDemo"
+      : "widget.thisMonth";
   // With the app lock on, the home screen must not reveal amounts.
   if (state.settings.biometrics)
     return {
-      title: t(state.demo ? "widget.thisMonthDemo" : "widget.thisMonth"),
+      title: t(title),
       noBudgetLabel: t("widget.locked"),
       netWorthLabel: t("widget.netWorth"),
       spent: "—",
@@ -47,10 +57,10 @@ export function widgetSnapshot(
   const currency = state.settings.currency;
   const cap = monthlyBudget(state, month, currency);
   const status = cap ? monthlyBudgetStatus(state, cap) : undefined;
-  const worth = netWorth(state, currency);
+  const worth = netWorth(availableState(state), currency);
   const other = currency === "DOP" ? "USD" : "DOP";
   return {
-    title: t(state.demo ? "widget.thisMonthDemo" : "widget.thisMonth"),
+    title: t(title),
     noBudgetLabel: t("widget.noBudget"),
     netWorthLabel: t("widget.netWorth"),
     spent: money(monthSpent(state, month, currency), currency, true),
@@ -74,13 +84,14 @@ export function widgetSnapshot(
   };
 }
 
-// Current month now, plus next month's figures from its first day so the
-// widget rolls over even if the app isn't opened.
+// Current budget period now, plus the next period's figures from its first
+// day so the widget rolls over even if the app isn't opened.
 export function widgetTimeline(state: FinanceState, now = new Date()) {
-  const month = monthKey();
-  const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const period = periodKey(state.settings.budgetPeriod);
+  const following = shiftPeriod(period, 1);
+  const next = new Date(`${periodRange(following).from}T00:00:00`);
   return [
-    { date: now, props: widgetSnapshot(state, month) },
-    { date: next, props: widgetSnapshot(state, shiftMonth(month, 1)) },
+    { date: now, props: widgetSnapshot(state, period) },
+    { date: next, props: widgetSnapshot(state, following) },
   ];
 }

@@ -15,6 +15,7 @@ import {
   Card,
   Choice,
   Empty,
+  AmountField,
   Field,
   FormError,
   Icon,
@@ -180,19 +181,19 @@ function GoalForm({ goal, onClose }: { goal?: Goal; onClose: () => void }) {
             ]}
             onChange={setCurrency}
           />
-          <Field
+          <AmountField
+            mode={mode}
             label={t("goalForm.target")}
             accessibilityLabel={t("goalForm.target")}
             value={target}
             onChangeText={setTarget}
-            keyboardType={mode === "cents" ? "number-pad" : "decimal-pad"}
           />
-          <Field
+          <AmountField
+            mode={mode}
             label={t("goalForm.saved")}
             accessibilityLabel={t("goalForm.savedA11y")}
             value={saved}
             onChangeText={setSaved}
-            keyboardType={mode === "cents" ? "number-pad" : "decimal-pad"}
           />
           <Action
             loading={form.busy}
