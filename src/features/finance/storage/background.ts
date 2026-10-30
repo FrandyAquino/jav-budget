@@ -24,7 +24,7 @@ if (!TaskManager.isTaskDefined(RECURRING_TASK))
         setLanguage(resolveLanguage(base.settings.language, getLocales()));
         return parseState(processRecurring(base));
       });
-      // Daily automatic backup (never throws; skipped for demo/unchanged data).
+      // Daily automatic backup (never throws; skipped for empty/unchanged data).
       if (state) await runAutoBackup(state);
       if (state) await syncReminders(state);
       // Cloud sync when signed in (bounded; never throws).

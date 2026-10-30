@@ -159,14 +159,6 @@ test("restoring a saved backup replaces the data after confirmation", async () =
   expect(fs.__files.has(`${FOLDER}/notes.json`)).toBe(true);
 });
 
-test("demo data is never backed up", async () => {
-  const { user } = await renderApp("/settings", { ...fixture(), demo: true });
-  await user.press(await screen.findByRole("button", { name: en("backup.now") }));
-  // The note under the status line, plus the error from the button.
-  await waitFor(() => expect(screen.getAllByText(en("backup.demoSkipped"))).toHaveLength(2));
-  expect(fs.__files.size).toBe(0);
-});
-
 test("automatic backups can be turned off", async () => {
   await renderApp("/settings");
   const toggle = await screen.findByRole("switch", { name: en("backup.auto") });

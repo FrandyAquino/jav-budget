@@ -49,7 +49,6 @@ const RECORD_COLUMNS = "collection,id,data,position,deleted,client_updated_at,se
 type Values = {
   userId?: string; // account this device's data belongs to
   bootstrapped?: string; // user id whose first sync finished
-  keepDemo?: string; // user id that chose to keep the demo (sync paused)
   cursor?: string; // JSON Cursor
   parked?: string; // JSON RecordRow[]
   receipts?: string; // JSON string[] of names known to be in the cloud
@@ -221,7 +220,7 @@ async function push(client: SupabaseClient, user: string) {
   for (let round = 0; round < 5; round++) {
     const { base, local } = await read();
     requireLedgerOwner(local, user);
-    if (!base || base.demo) return;
+    if (!base) return;
     const batches = buildPush(base, local.outbox);
     if (!batches.length) return;
     for (const batch of batches) {
@@ -258,7 +257,7 @@ async function pull(client: SupabaseClient, user: string, from: Cursor | null) {
     first = false;
     const stop = await syncTransact((base, local) => {
       requireLedgerOwner(local, user);
-      if (!base || base.demo) return { result: true };
+      if (!base) return { result: true };
       const parked = json<RecordRow[]>(values(local).parked, []);
       const result = applyRemote(base, [...parked, ...rows], pageMeta, local.outbox);
       const cursor = later(json<Cursor | null>(values(local).cursor, null), lastCursor(rows, null));
@@ -286,7 +285,7 @@ async function syncReceipts(client: SupabaseClient, user: string) {
   if (!receiptSyncSupported) return;
   const { base, local } = await read();
   requireLedgerOwner(local, user);
-  if (!base || base.demo) return;
+  if (!base) return;
   const cloud = new Set(json<string[]>(values(local).receipts, []));
   const plan = planReceipts(base, { cloud: [...cloud] }, receiptExists);
   for (const name of plan.upload.slice(0, 10))
@@ -377,7 +376,7 @@ async function bootstrap(client: SupabaseClient, user: string, mode: Bootstrap) 
         clearOutbox: switched,
         clearValues: switched,
         outbox: base ? seedOutbox(base, outbox, at) : {},
-        values: { userId: user, keepDemo: null },
+        values: { userId: user },
       },
       result: undefined,
     };
@@ -396,13 +395,6 @@ async function cycle(client: SupabaseClient, session: Session) {
   const v = values(local);
   // This check is local, so the existing owner can work during network outages.
   setSyncStatus({ ledgerUserId: v.userId === user && v.bootstrapped === user ? user : null });
-  if (base.demo) {
-    // Sample data never syncs; leaving it re-runs the first sync.
-    if (v.bootstrapped === user) await patch({ values: { bootstrapped: null, cursor: null, parked: null } });
-    if (v.keepDemo === user) return setSyncStatus({ phase: "paused", decision: null, ledgerUserId: user });
-    const remote = await remoteHasData(client, user);
-    return setSyncStatus({ phase: "paused", decision: { kind: "demo", remoteHasData: remote } });
-  }
   const needsBootstrap = v.bootstrapped !== user || v.userId !== user || base.settings.onboarded === false;
   if (needsBootstrap) {
     const kind = localKind(base);
@@ -410,7 +402,7 @@ async function cycle(client: SupabaseClient, session: Session) {
     const decision = decideFirstSync({ local: kind, remoteHasData: remote, previousUser: v.userId, user });
     if (decision === "switch" || decision === "merge")
       return setSyncStatus({ phase: "paused", decision: { kind: decision } });
-    if (decision !== "demo") await bootstrap(client, user, decision);
+    await bootstrap(client, user, decision);
   } else {
     await push(client, user);
     await pull(client, user, pullStart(json<Cursor | null>(v.cursor, null)));
@@ -466,7 +458,7 @@ export function requestSync(): Promise<void> {
   return running;
 }
 
-export type DecisionChoice = "merge" | "replace" | "keepDemo" | "cancel";
+export type DecisionChoice = "merge" | "replace" | "cancel";
 // Answers the pending first-sync question (SyncStatus.decision).
 export function resolveDecision(choice: DecisionChoice) {
   return transition(() => decide(choice));
@@ -484,7 +476,6 @@ async function decide(choice: DecisionChoice) {
   if (!client || !decision) return;
   if (choice === "cancel") return leave("keep");
   if (choice === "merge" && decision.kind !== "merge") return;
-  if (choice === "keepDemo" && decision.kind !== "demo") return;
   const session = await currentSession(client);
   if (!session) return setUser(null);
   if (session.user.id !== getSyncStatus().user?.id) {
@@ -492,10 +483,6 @@ async function decide(choice: DecisionChoice) {
     return;
   }
   const user = session.user.id;
-  if (choice === "keepDemo") {
-    await patch({ values: { keepDemo: user } });
-    return setSyncStatus({ decision: null, phase: "paused", ledgerUserId: user });
-  }
   await running;
   setSyncStatus({ decision: null, phase: "syncing", error: null });
   try {

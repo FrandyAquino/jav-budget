@@ -9,7 +9,7 @@ import {
   selectRetained,
   serializeBackup,
 } from "../src/features/backup/policy.ts";
-import { emptyState } from "../src/features/finance/demo.ts";
+import { emptyState } from "../src/features/finance/defaults.ts";
 import { parseState } from "../src/features/finance/schema.ts";
 
 test("backup file names round-trip and only strict names parse", () => {
@@ -40,12 +40,11 @@ test("a backup is due once per day for enabled real data", () => {
   assert.equal(isBackupDue({ ...base, realData: false, dates: [] }), false);
 });
 
-test("demo and empty ledgers are not real data", () => {
+test("empty ledgers are not real data", () => {
   const empty = emptyState();
   assert.equal(hasRealData(empty), false);
   const account = { id: "a", name: "Cash", type: "cash", currency: "DOP", opening: 0, color: "#000000" } as const;
   assert.equal(hasRealData({ ...empty, accounts: [account] }), true);
-  assert.equal(hasRealData({ ...empty, demo: true, accounts: [account] }), false);
 });
 
 test("retention keeps 7 recent backups plus the newest of the 3 previous months", () => {

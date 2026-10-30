@@ -65,7 +65,7 @@ If `EXPO_PUBLIC_SENTRY_DSN` is set for the build, also declare **Diagnostics →
 
 ## App Review notes
 
-> The app is fully usable without an account. On first launch choose "Explore with demo data" to see sample data, or create an account to start from zero. Cloud sync (Settings → Account & sync) uses an emailed one-time code. Account deletion is in the same section. Face ID only locks the interface.
+> Sign in with email or Google, then a short setup creates your first account and categories. Cloud sync (Settings → Account & sync) uses an emailed one-time code. Account deletion is in the same section. Face ID only locks the interface.
 
 Sign-in uses email codes, so a reviewer can't use a fixed password. Either rely on the note above (sync is optional) or create a review mailbox and give its address in App Store Connect.
 

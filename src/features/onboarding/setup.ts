@@ -1,17 +1,8 @@
 // Pure first-run setup: what the onboarding suggests and the state it builds.
 // React-free (node tests import it); callers persist through update(), which
 // validates with parseState.
-import {
-  t as tr,
-  type PlainKey,
-  type Translate,
-} from "../../shared/i18n/core.ts";
-import {
-  defaultCategories,
-  demoState,
-  emptyState,
-  withoutStarterCategories,
-} from "../finance/demo.ts";
+import { t as tr, type Translate } from "../../shared/i18n/core.ts";
+import { defaultCategories, starterKeys } from "../finance/defaults.ts";
 import { exchangeRate } from "../finance/money.ts";
 import { id } from "../finance/transactions.ts";
 import type {
@@ -22,31 +13,19 @@ import type {
 } from "../finance/types.ts";
 
 // A suggestion's `key` identifies it in the UI only. Chosen suggestions get
-// fresh ids, so they are the user's own categories: never pruned as unused
-// starters (withoutUnusedDefaults), dropped by "Start fresh"
-// (withoutStarterCategories) or relabeled like demo data (relabelDemo).
+// fresh ids, so they are the user's own categories and never pruned as unused
+// starters (withoutUnusedDefaults).
 export type CategoryDraft = Omit<Category, "id">;
 export type Suggestion = CategoryDraft & { key: string; preselected: boolean };
 
-const starterNames: Record<string, PlainKey> = {
-  food: "demo.category.food",
-  shopping: "demo.category.shopping",
-  transport: "demo.category.transport",
-  home: "demo.category.home",
-  health: "demo.category.health",
-  fun: "demo.category.fun",
-  salary: "demo.category.salary",
-  freelance: "demo.category.freelance",
-  other: "demo.category.other",
-};
 const preselected = new Set(["food", "transport", "home", "salary"]);
 
-// The starter set (icons/colors from demo.ts), named in the given language
+// The starter set (icons/colors from defaults.ts), named in the given language
 // (components pass useT().t so the names follow language changes).
 export function suggestedCategories(translate: Translate = tr): Suggestion[] {
   return defaultCategories.map(({ id: key, icon, color, kind }) => ({
     key,
-    name: starterNames[key] ? translate(starterNames[key]) : key,
+    name: starterKeys[key] ? translate(starterKeys[key]) : key,
     icon,
     color,
     kind,
@@ -99,8 +78,7 @@ export type OnboardingAnswers = {
   categories: CategoryDraft[];
 };
 
-// Applies the onboarding answers on top of `base` (empty, or what "Start
-// fresh" kept) and marks onboarding as done. Throws a localized error.
+// Applies the onboarding answers on top of `base` and marks onboarding as done. Throws a localized error.
 export function completeOnboarding(
   base: FinanceState,
   answers: OnboardingAnswers,
@@ -130,7 +108,6 @@ export function completeOnboarding(
     throw new Error(tr("onboarding.error.expenseRequired"));
   return {
     ...base,
-    demo: false,
     starterPruned: true,
     accounts: [...base.accounts, account],
     categories,
@@ -143,34 +120,5 @@ export function completeOnboarding(
           : exchangeRate(answers.dopPerUsd, now),
       onboarded: true,
     },
-  };
-}
-
-// "Explore with demo data": the labeled demo, keeping device preferences.
-export function exploreDemo(base: FinanceState): FinanceState {
-  const demo = demoState();
-  const { language, appearance, appIcon, biometrics, notifications } =
-    base.settings;
-  return {
-    ...demo,
-    settings: {
-      ...demo.settings,
-      language,
-      appearance,
-      appIcon,
-      biometrics,
-      notifications,
-      onboarded: true,
-    },
-  };
-}
-
-// "Start fresh" from the demo: clears the demo records, keeps preferences and
-// the user's own categories, and sends the user through onboarding again.
-export function restartOnboarding(base: FinanceState): FinanceState {
-  return {
-    ...emptyState(),
-    settings: { ...base.settings, onboarded: false },
-    categories: withoutStarterCategories(base.categories),
   };
 }

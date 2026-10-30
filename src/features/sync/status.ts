@@ -6,8 +6,7 @@ export type SyncErrorCode = "offline" | "auth" | "server";
 // Choices the user must make before the first sync with an account.
 export type SyncDecision =
   | { kind: "merge" }
-  | { kind: "switch" }
-  | { kind: "demo"; remoteHasData: boolean };
+  | { kind: "switch" };
 export type SyncStatus = {
   configured: boolean;
   // Auth state has been read (avoids flashing the sign-in form on launch).

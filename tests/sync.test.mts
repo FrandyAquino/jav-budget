@@ -25,7 +25,7 @@ import {
   syncChanges,
   type RecordRow,
 } from "../src/features/sync/core.ts";
-import { demoState, emptyState } from "../src/features/finance/demo.ts";
+import { emptyState } from "../src/features/finance/defaults.ts";
 import { parseState } from "../src/features/finance/schema.ts";
 import type { FinanceState, Transaction } from "../src/features/finance/types.ts";
 
@@ -68,7 +68,7 @@ test("change tracking records only synced data that really changed", () => {
   assert.deepEqual(syncChanges(prev, currency), [settingKey("currency")]);
 });
 
-test("device-local settings, demo data and unfinished onboarding never enter the outbox", () => {
+test("device-local settings and unfinished onboarding never enter the outbox", () => {
   const prev = ledger();
   for (const next of [
     { ...prev, settings: { ...prev.settings, appearance: "dark" as const } },
@@ -78,14 +78,10 @@ test("device-local settings, demo data and unfinished onboarding never enter the
     { ...prev, starterPruned: !prev.starterPruned },
   ])
     assert.deepEqual(syncChanges(prev, next), []);
-  const demo = demoState();
-  assert.deepEqual(syncChanges(demo, { ...demo, transactions: demo.transactions.slice(1) }), []);
-  assert.deepEqual(syncChanges(prev, { ...demo }), []);
   const unfinished = { ...prev, settings: { ...prev.settings, onboarded: false } };
   assert.deepEqual(syncChanges(prev, unfinished), []);
-  // Finishing onboarding / leaving the demo: everything in the new state is new.
+  // Finishing onboarding: everything in the new state is new.
   assert.deepEqual(syncChanges(unfinished, prev).sort(), allKeys(prev).sort());
-  assert.deepEqual(syncChanges(demo, prev).sort(), allKeys(prev).sort());
   for (const field of DEVICE_LOCAL_SETTINGS)
     assert.ok(!allKeys(prev).includes(settingKey(field as never)), field);
 });
@@ -177,7 +173,7 @@ test("pulled settings never touch device-local preferences and echoes are no-ops
   assert.equal(result.state.settings.biometrics, false);
   assert.equal(result.state.settings.appearance, "system");
   assert.equal(result.state.settings.language, "system");
-  assert.equal(result.state.demo, false);
+  assert.equal("demo" in result.state, false);
   // The same record back from the cloud (jsonb reorders keys): nothing changes.
   const t1 = state.transactions[0];
   const reordered = Object.fromEntries(Object.entries(t1).reverse());
@@ -230,17 +226,13 @@ test("first sign-in decision matrix", () => {
     [{ local: "data", remoteHasData: false, user }, "push"],
     [{ local: "data", remoteHasData: true, user }, "merge"],
     [{ local: "data", remoteHasData: true, user, previousUser: user }, "merge"],
-    [{ local: "demo", remoteHasData: true, user }, "demo"],
-    [{ local: "demo", remoteHasData: false, user }, "demo"],
     [{ local: "data", remoteHasData: false, user, previousUser: "u0" }, "switch"],
-    [{ local: "demo", remoteHasData: true, user, previousUser: "u0" }, "switch"],
     // Nothing on this device: another account's leftovers don't matter.
     [{ local: "empty", remoteHasData: true, user, previousUser: "u0" }, "pull"],
   ];
   for (const [input, expected] of cases) assert.equal(decideFirstSync(input), expected, JSON.stringify(input));
   assert.equal(localKind(null), "empty");
   assert.equal(localKind(emptyState()), "empty");
-  assert.equal(localKind(demoState()), "demo");
   assert.equal(localKind(ledger()), "data");
   // Only categories left (e.g. after Start fresh): still empty.
   assert.equal(localKind({ ...emptyState(), settings: { ...emptyState().settings, onboarded: true }, categories: ledger().categories }), "empty");

@@ -6,7 +6,7 @@
 // Runs only with SUPABASE_IT=1 and the SUPABASE_IT_* variables (environment or
 // the gitignored __tests__/integration/credentials.local.json): `npm run test:it`. Skipped otherwise.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { demoState, emptyState, monthKey, today, type FinanceState } from "@/features/finance/model";
+import { emptyState, monthKey, today, type FinanceState } from "@/features/finance/model";
 import { parseState } from "@/features/finance/schema";
 import { DEVICE_LOCAL_SETTINGS, SHARED_SETTINGS, SYNCED_COLLECTIONS, metaKey } from "@/features/sync/core";
 import {
@@ -192,29 +192,6 @@ describeIT("cloud sync against Supabase (integration)", () => {
     expect(d1.local().values).toMatchObject({ userId: userA, bootstrapped: userA });
   });
 
-  test("1b. sample (demo) data is never pushed", async () => {
-    const before = await serverRecords(readerA, userA);
-    const demo = createDevice("demo device (A)");
-    demo.seed(demoState());
-    await demo.signIn(IT.emailA);
-    await demo.sync();
-    expect(demo.status.getSyncStatus()).toMatchObject({ phase: "paused", decision: { kind: "demo", remoteHasData: true } });
-    // Asking again keeps the question (still nothing pushed).
-    await demo.sync();
-    expect(demo.status.getSyncStatus().decision).toEqual({ kind: "demo", remoteHasData: true });
-    // "Keep the demo": sync stays paused.
-    await demo.engine.resolveDecision("keepDemo");
-    await demo.sync();
-    expect(demo.status.getSyncStatus()).toMatchObject({ phase: "paused", decision: null });
-    const after = await serverRecords(readerA, userA);
-    expect(after).toEqual(before);
-    const demoIds = new Set(SYNCED_COLLECTIONS.flatMap((c) => demoState()[c].map((r) => r.id)));
-    expect(after.some((r) => demoIds.has(r.id) && !ledgerA()[r.collection as "accounts"].some((x) => x.id === r.id))).toBe(false);
-    expect((await serverMeta(readerA, userA)).find((m) => m.key === "settings_name")?.data).toBe("Ana IT");
-    // The demo device's ledger is untouched.
-    expect(demo.state()?.demo).toBe(true);
-  });
-
   test("2. an empty second device signs in and pulls everything", async () => {
     d2 = createDevice("device 2 (A)");
     d2.seed(freshInstall());
@@ -225,7 +202,6 @@ describeIT("cloud sync against Supabase (integration)", () => {
     const state = d2.state()!;
     expect(() => parseState(state)).not.toThrow();
     expect(state.settings.onboarded).toBe(true);
-    expect(state.demo).toBe(false);
     expect(synced(state)).toEqual(synced(d1.state()));
     // Device-local settings stay this device's own.
     const fresh = freshInstall().settings;

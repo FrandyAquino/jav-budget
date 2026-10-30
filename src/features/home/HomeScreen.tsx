@@ -24,7 +24,7 @@ import {
 import { PeriodSelector, usePeriod } from "@/shared/PeriodSelector";
 import { TransactionForm } from "@/features/transactions/components";
 import { NetWorthHero } from "./NetWorthHero";
-import { DemoBanner, HomeHeaderActions } from "./HomeHeader";
+import { HomeHeaderActions } from "./HomeHeader";
 import { QuickActions } from "./QuickActions";
 import {
   CashFlowCard,
@@ -34,7 +34,7 @@ import {
 import { AccountsCard } from "./AccountsCard";
 import { BudgetCard } from "./BudgetCard";
 import { UpcomingCard } from "./UpcomingCard";
-import { FreshStartSheet, WorkspaceSheet } from "./HomeSheets";
+import { WorkspaceSheet } from "./HomeSheets";
 import { useT } from "@/shared/i18n/react";
 import { ExportReminder } from "@/features/backup/ExportReminder";
 
@@ -46,7 +46,6 @@ export default function HomeScreen() {
   const report = useEntryReport(period.range);
   const [quickAdd, setQuickAdd] = useState<Kind>();
   const [menu, setMenu] = useState(false);
-  const [fresh, setFresh] = useState(false);
   const [editing, setEditing] = useState<Transaction>();
   const currency = state.settings.currency;
   // Savings accounts can be left out of the hero; "all" shows every account.
@@ -76,7 +75,6 @@ export default function HomeScreen() {
       </Row>
       <PeriodSelector period={period} />
       <EntryReportControls report={report} />
-      {state.demo && <DemoBanner onPress={() => setFresh(true)} />}
       <ExportReminder />
       <Grid>
         {[
@@ -128,7 +126,6 @@ export default function HomeScreen() {
         />
       )}
       {menu && <WorkspaceSheet onClose={() => setMenu(false)} />}
-      {fresh && <FreshStartSheet onClose={() => setFresh(false)} />}
     </Screen>
   );
 }

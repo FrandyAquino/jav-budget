@@ -89,7 +89,7 @@ function prune() {
       }
 }
 
-// Automatic backup: at most one file per day, only for real (non-demo) data
+// Automatic backup: at most one file per day, only for real data
 // that changed since the newest backup. Never throws; failures are logged and
 // surfaced through the backup status in Settings.
 export function runAutoBackup(state: FinanceState): Promise<boolean> {
@@ -131,7 +131,6 @@ export function backupNow(state: FinanceState): Promise<void> {
   const user = owner();
   return serial(async () => {
     if (owner() !== user) throw new Error("Account changed before backup");
-    if (state.demo) throw new Error(t("backup.demoSkipped"));
     if (!hasRealData(state)) throw new Error(t("backup.nothingToBackUp"));
     try {
       await write(localDate(), serializeBackup(state));

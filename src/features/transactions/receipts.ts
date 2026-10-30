@@ -45,7 +45,7 @@ export function deleteReceipt(uri?: string) {
   }
 }
 
-// Best effort: removes receipt files no transaction references (after Start
+// fresh, restoring a backup, and once at startup).
 // fresh, restoring a backup, loading the demo, and once at startup).
 export function sweepReceipts(state: Pick<FinanceState, "transactions">) {
   try {

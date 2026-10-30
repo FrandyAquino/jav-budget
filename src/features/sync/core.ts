@@ -36,7 +36,7 @@ export const SHARED_SETTINGS = [
 export type SharedSetting = (typeof SHARED_SETTINGS)[number];
 // Never uploaded nor applied from the cloud: they describe this device
 // (app lock, reminders, icon, theme, language, backups) or are local
-// bookkeeping (onboarding, demo flag, migration markers).
+// bookkeeping (onboarding, migration markers).
 export const DEVICE_LOCAL_SETTINGS = [
   "biometrics",
   "notifications",
@@ -88,10 +88,10 @@ export function changesFromDiff(
   // Nothing before (first launch, legacy migration): nothing was changed by
   // the user here. The first sign-in uploads existing data explicitly.
   if (!prev) return [];
-  // Demo data and an unfinished onboarding are never uploaded.
-  if (next.demo || next.settings.onboarded === false) return [];
-  // Leaving the demo / finishing onboarding: everything in `next` is new.
-  if (prev.demo || prev.settings.onboarded === false) return allKeys(next);
+  // An unfinished onboarding is never uploaded.
+  if (next.settings.onboarded === false) return [];
+  // Finishing onboarding: everything in `next` is new.
+  if (prev.settings.onboarded === false) return allKeys(next);
   const keys: string[] = [];
   for (const row of diff.upserts)
     if (
@@ -435,10 +435,9 @@ export function mergeParked(previous: RecordRow[], next: RecordRow[], limit = 50
 }
 
 // What a device has, for the first sign-in.
-export type LocalKind = "demo" | "empty" | "data";
+export type LocalKind = "empty" | "data";
 export function localKind(state: FinanceState | null): LocalKind {
   if (!state) return "empty";
-  if (state.demo) return "demo";
   if (state.settings.onboarded === false || !hasRealData(state)) return "empty";
   return "data";
 }
@@ -446,8 +445,6 @@ export type FirstSync =
   // Different account than the one this device synced with: only an explicit
   // "Replace this device's data" may continue.
   | "switch"
-  // Sample data: never uploaded. Ask to replace it or keep it (sync paused).
-  | "demo"
   // Nothing here: download everything (union, the cloud wins conflicts).
   | "pull"
   // Nothing in the cloud: upload everything.
@@ -466,7 +463,6 @@ export function decideFirstSync({
   user: string;
 }): FirstSync {
   if (previousUser && previousUser !== user && local !== "empty") return "switch";
-  if (local === "demo") return "demo";
   if (local === "empty") return "pull";
   return remoteHasData ? "merge" : "push";
 }

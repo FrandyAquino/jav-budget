@@ -18,15 +18,13 @@ const rule = (id: string, over: Partial<ReminderInput["recurring"][number]> = {}
   ...over,
 });
 const input = (over: Partial<ReminderInput> = {}): ReminderInput => ({
-  demo: false,
   settings: { notifications: true },
   recurring: [],
   accounts: [],
   ...over,
 });
 
-test("demo data and disabled notifications schedule nothing", () => {
-  assert.deepEqual(planReminders(input({ demo: true, recurring: [rule("r")] }), now), []);
+test("disabled notifications schedule nothing", () => {
   assert.deepEqual(
     planReminders(input({ settings: { notifications: false }, recurring: [rule("r")] }), now),
     [],

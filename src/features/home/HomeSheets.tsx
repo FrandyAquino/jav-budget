@@ -1,18 +1,6 @@
 import { Pressable } from "react-native";
 import { router } from "expo-router";
-import { restartOnboarding } from "@/features/onboarding/setup";
-import { sweepReceipts } from "@/features/transactions/receipts";
-import { useFinance } from "@/features/finance/store";
-import {
-  Action,
-  FormError,
-  Icon,
-  Row,
-  Sheet,
-  Txt,
-  useFormAction,
-  useTheme,
-} from "@/shared/ui";
+import { Icon, Row, Sheet, Txt, useTheme } from "@/shared/ui";
 import { useT } from "@/shared/i18n/react";
 import type { PlainKey } from "@/shared/i18n/core";
 
@@ -52,38 +40,6 @@ export function WorkspaceSheet({ onClose }: { onClose: () => void }) {
           </Row>
         </Pressable>
       ))}
-    </Sheet>
-  );
-}
-export function FreshStartSheet({ onClose }: { onClose: () => void }) {
-  const { update } = useFinance();
-  const form = useFormAction();
-  const { t } = useT();
-  return (
-    <Sheet
-      title={t("home.fresh.title")}
-      subtitle={t("home.fresh.subtitle")}
-      onClose={onClose}
-    >
-      <FormError message={form.error} />
-      <Action
-        loading={form.busy}
-        onPress={() =>
-          void form.run(async () => {
-            // Real users only get their own categories, never the starters.
-            // onboarded=false: the root Stack swaps to the onboarding flow.
-            await update(restartOnboarding);
-            // The demo transactions and their photos are gone.
-            sweepReceipts({ transactions: [] });
-            onClose();
-          })
-        }
-      >
-        {t("home.fresh.confirm")}
-      </Action>
-      <Action secondary onPress={onClose}>
-        {t("home.fresh.keep")}
-      </Action>
     </Sheet>
   );
 }

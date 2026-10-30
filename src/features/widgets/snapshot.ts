@@ -26,20 +26,13 @@ export type BudgetWidgetProps = {
   netWorth: string;
   // Second currency line when no exchange rate lets us combine balances.
   netWorthAlt: string;
-  demo: boolean;
 };
 
 export function widgetSnapshot(
   state: FinanceState,
   month = periodKey(state.settings.budgetPeriod),
 ): BudgetWidgetProps {
-  const title = isHalfPeriod(month)
-    ? state.demo
-      ? "widget.thisPeriodDemo"
-      : "widget.thisPeriod"
-    : state.demo
-      ? "widget.thisMonthDemo"
-      : "widget.thisMonth";
+  const title = isHalfPeriod(month) ? "widget.thisPeriod" : "widget.thisMonth";
   // With the app lock on, the home screen must not reveal amounts.
   if (state.settings.biometrics)
     return {
@@ -52,7 +45,6 @@ export function widgetSnapshot(
       budgetOver: false,
       netWorth: "—",
       netWorthAlt: "",
-      demo: state.demo,
     };
   const currency = state.settings.currency;
   const cap = monthlyBudget(state, month, currency);
@@ -80,7 +72,6 @@ export function widgetSnapshot(
       worth.total === undefined
         ? money(worth.byCurrency[other], other, true)
         : "",
-    demo: state.demo,
   };
 }
 

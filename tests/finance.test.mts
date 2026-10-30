@@ -9,7 +9,6 @@ import {
   balanceSeries,
   cents,
   defaultCategories,
-  demoState,
   emptyState,
   monthKey,
   money,
@@ -310,8 +309,24 @@ test("paused recurring items do not post transactions", () => {
   ];
   assert.equal(processRecurring(state).transactions.length, 0);
 });
+// One of every entity, as parseState fills it.
+function fullState(): FinanceState {
+  const state = fixture();
+  const { id: _id, date: _date, ...template } = tx({ tags: ["home"] });
+  return {
+    ...state,
+    transactions: [
+      tx({ id: "t1", tags: [] }),
+      tx({ id: "t2", kind: "transfer", toAccountId: "cash", received: 2500, categoryId: "", tags: [] }),
+    ],
+    budgets: [{ id: "b1", categoryId: "food", currency: "DOP", month: "2026-10-Q1", limit: 5000, rollover: true }],
+    monthlyBudgets: [{ id: "m1", currency: "DOP", month: "2026-10", limit: 90000 }],
+    recurring: [{ ...template, id: "r1", nextDate: "2099-01-31", frequency: "monthly", anchorDay: 31, active: true, subscription: false }],
+    goals: [{ id: "g1", name: "Trip", currency: "USD", target: 100000, saved: 2000 }],
+  };
+}
 test("validated backup round-trips every entity", () => {
-  const state = demoState();
+  const state = parseState(fullState());
   assert.deepEqual(parseState(JSON.parse(JSON.stringify(state))), state);
 });
 test("backup rejects unsupported versions, dangling references, duplicate IDs and budgets", () => {
@@ -453,9 +468,21 @@ test("upcoming entries are projections, exclude paused rules and never change ba
   );
 });
 
-test("new users start without starter categories; demo keeps them", () => {
+test("new users start without starter categories", () => {
   assert.deepEqual(emptyState().categories, []);
-  assert.ok(demoState().categories.length > 0);
+});
+
+test("a ledger saved with the removed sample data keeps only preferences", () => {
+  const saved = { ...fullState(), demo: true };
+  saved.settings = { ...saved.settings, name: "Ana", language: "es" };
+  const state = parseState(saved);
+  assert.deepEqual(
+    [state.accounts, state.categories, state.transactions, state.budgets, state.recurring, state.goals],
+    [[], [], [], [], [], []],
+  );
+  assert.equal(state.settings.onboarded, false);
+  assert.equal(state.settings.name, "Ana");
+  assert.equal("demo" in state, false);
 });
 
 test("unused, untouched starter categories are dropped from saved data", () => {
@@ -492,6 +519,4 @@ test("unused, untouched starter categories are dropped from saved data", () => {
     "pets",
     "shopping",
   ]);
-  const demo = demoState();
-  assert.equal(withoutUnusedDefaults(demo), demo);
 });

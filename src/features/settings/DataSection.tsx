@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { router } from "expo-router";
 import { useFinance } from "@/features/finance/store";
-import { demoState, emptyState } from "@/features/finance/model";
+import { emptyState } from "@/features/finance/model";
 import { parseState } from "@/features/finance/schema";
 import { sweepReceipts } from "@/features/transactions/receipts";
 import { exportBackup, pickBackup } from "@/features/finance/device";
@@ -24,7 +24,7 @@ import { ExportReminder } from "@/features/backup/ExportReminder";
 import { serializeBackup } from "@/features/backup/policy";
 import { useSyncStatus } from "@/features/sync/status";
 
-type Dialog = "reset" | "demo" | "import" | "restore";
+type Dialog = "reset" | "import" | "restore";
 
 // `onReplaced` runs after the whole ledger (including the profile) was replaced.
 export function DataSection({ onReplaced }: { onReplaced: () => void }) {
@@ -46,7 +46,7 @@ export function DataSection({ onReplaced }: { onReplaced: () => void }) {
   };
   const replace = () =>
     modalForm.run(async () => {
-      let restored = dialog === "demo" ? demoState() : emptyState();
+      let restored = emptyState();
       if (dialog === "import" || dialog === "restore") {
         if (backup.length > 10_000_000)
           throw new Error(t("data.tooLarge"));
@@ -138,9 +138,6 @@ export function DataSection({ onReplaced }: { onReplaced: () => void }) {
           detail={t("data.csvDetail")}
           onPress={() => router.push("/import")}
         />
-        <Action secondary onPress={() => open("demo")}>
-          {t("data.demo")}
-        </Action>
         <Action secondary onPress={() => open("reset")}>
           {t("data.erase")}
         </Action>

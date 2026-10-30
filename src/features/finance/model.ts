@@ -5,4 +5,4 @@ export * from "./transactions.ts";
 export * from "./recurrence.ts";
 export * from "./reports.ts";
 export * from "./budgets.ts";
-export * from "./demo.ts";
+export * from "./defaults.ts";

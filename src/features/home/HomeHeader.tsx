@@ -1,7 +1,7 @@
 import { Pressable } from "react-native";
 import { router } from "expo-router";
 import { useFinance } from "@/features/finance/store";
-import { Icon, IconButton, Row, Txt, useTheme } from "@/shared/ui";
+import { IconButton, Row, Txt, useTheme } from "@/shared/ui";
 import { useT } from "@/shared/i18n/react";
 
 export function HomeHeaderActions({ onOpenMenu }: { onOpenMenu: () => void }) {
@@ -48,34 +48,5 @@ export function HomeHeaderActions({ onOpenMenu }: { onOpenMenu: () => void }) {
         </Txt>
       </Pressable>
     </Row>
-  );
-}
-export function DemoBanner({ onPress }: { onPress: () => void }) {
-  const { colors } = useTheme();
-  const { t } = useT();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={{
-        backgroundColor: colors.soft,
-        borderRadius: 12,
-        paddingVertical: 10,
-        paddingHorizontal: 14,
-        marginTop: -12,
-      }}
-    >
-      <Row style={{ justifyContent: "space-between" }}>
-        <Row style={{ gap: 8 }}>
-          <Icon name="sun" size={14} color={colors.accent} />
-          <Txt size={11} color={colors.accent}>
-            {t("home.demo.banner")}
-          </Txt>
-        </Row>
-        <Txt size={11} weight="600" color={colors.accent}>
-          {t("home.demo.cta")}
-        </Txt>
-      </Row>
-    </Pressable>
   );
 }

@@ -26,15 +26,14 @@ export function parseBackupName(name: string): string | undefined {
   const match = NAME.exec(name);
   return match && validDate(match[1]) ? match[1] : undefined;
 }
-// Data worth protecting: not the demo, and not an empty ledger (backing up an
+// Data worth protecting: not an empty ledger (backing up an
 // erased ledger would push real backups out of the retention window).
 export function hasRealData(
   state: Pick<
     FinanceState,
-    "demo" | "accounts" | "transactions" | "budgets" | "monthlyBudgets" | "recurring" | "goals"
+    "accounts" | "transactions" | "budgets" | "monthlyBudgets" | "recurring" | "goals"
   >,
 ): boolean {
-  if (state.demo) return false;
   return [
     state.accounts,
     state.transactions,

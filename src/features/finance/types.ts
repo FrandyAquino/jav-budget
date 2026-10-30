@@ -102,9 +102,8 @@ export type Settings = {
 };
 export type FinanceState = {
   version: 2;
-  demo: boolean;
   // One-time migration marker: unused starter categories were removed from
-  // pre-existing non-demo data. parseState always fills it (false for old data).
+  // pre-existing data. parseState always fills it (false for old data).
   starterPruned?: boolean;
   accounts: Account[];
   categories: Category[];

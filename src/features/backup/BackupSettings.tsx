@@ -90,11 +90,6 @@ export function BackupSettings({
             })
           : t("backup.none")}
       </Txt>
-      {state.demo ? (
-        <Txt size={12} color={colors.muted}>
-          {t("backup.demoSkipped")}
-        </Txt>
-      ) : null}
       <FormError message={status.error ? t("backup.lastFailed", { detail: status.error }) : ""} />
       <FormError message={listError ?? ""} />
       <Action

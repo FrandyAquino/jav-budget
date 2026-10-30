@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import {
   convert,
   defaultCategories,
-  demoState,
   duplicateTransaction,
   emptyState,
   exchangeRate,
@@ -145,14 +144,11 @@ test("v2 data saved before the language setting existed still parses", () => {
   assert.throws(() => parseState(stored), /not a valid/);
 });
 test("v1 stored state from the previous app version still loads", () => {
-  const legacy = { ...JSON.parse(JSON.stringify(demoState())), version: 1 };
-  delete legacy.monthlyBudgets;
-  for (const t of legacy.transactions) delete t.tags;
-  for (const b of legacy.budgets) delete b.rollover;
-  for (const r of legacy.recurring) delete r.tags;
+  const legacy = v1Backup();
   const state = parseState(legacy);
   assert.equal(state.version, 2);
-  assert.equal(state.transactions.length, demoState().transactions.length);
+  assert.equal(state.transactions.length, legacy.transactions.length);
+  assert.equal("demo" in state, false);
 });
 test("migration keeps integrity checks", () => {
   const backup = v1Backup();

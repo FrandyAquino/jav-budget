@@ -3,11 +3,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   defaultCategories,
-  demoState,
   emptyState,
   pruneStarterCategoriesOnce,
-  relabelDemo,
-  withoutStarterCategories,
   withoutUnusedDefaults,
   type FinanceState,
 } from "../src/features/finance/model.ts";
@@ -16,9 +13,7 @@ import { setLanguage, translate } from "../src/shared/i18n/core.ts";
 import {
   completeOnboarding,
   customCategory,
-  exploreDemo,
   parseRate,
-  restartOnboarding,
   suggestedCategories,
   type OnboardingAnswers,
 } from "../src/features/onboarding/setup.ts";
@@ -38,10 +33,9 @@ function answers(patch: Partial<OnboardingAnswers> = {}): OnboardingAnswers {
   };
 }
 
-test("brand-new data is not onboarded; the demo is", () => {
+test("brand-new data is not onboarded", () => {
   assert.equal(emptyState().settings.onboarded, false);
   assert.equal(parseState(emptyState()).settings.onboarded, false);
-  assert.equal(demoState().settings.onboarded, true);
 });
 
 test("stored data and backups without the field default to onboarded", () => {
@@ -49,7 +43,7 @@ test("stored data and backups without the field default to onboarded", () => {
   delete legacy.settings.onboarded;
   assert.equal(parseState(legacy).settings.onboarded, true);
   // A v1 backup is migrated and also counts as an existing user.
-  const v1 = { ...JSON.parse(JSON.stringify(demoState())), version: 1 };
+  const v1 = { ...JSON.parse(JSON.stringify(emptyState())), version: 1 };
   delete v1.settings.onboarded;
   delete v1.monthlyBudgets;
   assert.equal(parseState(v1).settings.onboarded, true);
@@ -68,7 +62,7 @@ test("suggestions mirror the starter set, localized, with a few preselected", ()
   const es = suggestedCategories();
   setLanguage("en");
   assert.equal(es.length, defaultCategories.length);
-  assert.equal(es[0].name, translate("es", "demo.category.food"));
+  assert.equal(es[0].name, translate("es", "starter.category.food"));
   assert.deepEqual(
     es.map(({ key, icon, color, kind }) => ({ id: key, icon, color, kind })),
     defaultCategories.map(({ id, icon, color, kind }) => ({ id, icon, color, kind })),
@@ -83,7 +77,6 @@ test("completeOnboarding builds a valid ledger and marks it onboarded", () => {
   n = 0;
   const state = parseState(completeOnboarding(emptyState(), answers(), makeId, NOW));
   assert.equal(state.settings.onboarded, true);
-  assert.equal(state.demo, false);
   assert.equal(state.settings.currency, "USD");
   assert.deepEqual(state.settings.exchangeRate, { dopPerUsd: 60.25, updatedAt: NOW });
   assert.equal(state.accounts.length, 1);
@@ -109,8 +102,6 @@ test("onboarding categories are the user's own: never pruned or relabeled", () =
   // Unused, with starter (Spanish) names, but not starters: they stay.
   assert.equal(withoutUnusedDefaults(state), state);
   assert.equal(pruneStarterCategoriesOnce({ ...state, starterPruned: false }).categories.length, 4);
-  assert.equal(withoutStarterCategories(state.categories).length, 4);
-  assert.equal(relabelDemo(state, "es"), state);
   assert.equal(state.starterPruned, true);
 });
 
@@ -161,39 +152,3 @@ test("completeOnboarding validates its answers", () => {
   assert.equal(parseRate(" 58,5 "), 58.5);
 });
 
-test("Start fresh restarts onboarding and keeps the user's own categories", () => {
-  const demo = demoState();
-  demo.settings.language = "es";
-  demo.categories.push({ id: "mine", name: "Mascotas", icon: "tag", color: "#555B65", kind: "expense" });
-  const restarted = parseState(restartOnboarding(demo));
-  assert.equal(restarted.settings.onboarded, false);
-  assert.equal(restarted.settings.language, "es");
-  assert.equal(restarted.demo, false);
-  assert.deepEqual(restarted.accounts, []);
-  assert.deepEqual(restarted.categories.map((c) => c.id), ["mine"]);
-  // Existing categories count toward the expense requirement and are not duplicated.
-  const done = parseState(
-    completeOnboarding(
-      restarted,
-      answers({ categories: [customCategory("mascotas", "expense")] }),
-      makeId,
-      NOW,
-    ),
-  );
-  assert.deepEqual(done.categories.map((c) => c.id), ["mine"]);
-  assert.equal(done.settings.onboarded, true);
-});
-
-test("Explore with demo data loads the demo and keeps device preferences", () => {
-  const base = emptyState();
-  base.settings.language = "es";
-  base.settings.appearance = "dark";
-  base.settings.biometrics = true;
-  const state = parseState(exploreDemo(base));
-  assert.equal(state.demo, true);
-  assert.equal(state.settings.onboarded, true);
-  assert.equal(state.settings.language, "es");
-  assert.equal(state.settings.appearance, "dark");
-  assert.equal(state.settings.biometrics, true);
-  assert.equal(state.transactions.length, demoState().transactions.length);
-});

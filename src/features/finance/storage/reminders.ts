@@ -5,7 +5,6 @@ import { nextDate, type Account, type Recurring } from "../model.ts";
 export const REMINDER_CAP = 60;
 export const REMINDER_PREFIX = "jav:";
 export type ReminderInput = {
-  demo: boolean;
   settings: { notifications: boolean };
   recurring: Pick<
     Recurring,
@@ -41,7 +40,7 @@ export function planReminders(
   now = new Date(),
   { cap = REMINDER_CAP, perSource = 6, horizonDays = 120 }: ReminderOptions = {},
 ): PlannedReminder[] {
-  if (state.demo || !state.settings.notifications) return [];
+  if (!state.settings.notifications) return [];
   const end = new Date(now);
   end.setDate(end.getDate() + horizonDays);
   const planned: PlannedReminder[] = [];

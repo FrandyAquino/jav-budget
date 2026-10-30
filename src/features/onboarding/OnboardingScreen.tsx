@@ -40,7 +40,6 @@ import { useT } from "@/shared/i18n/react";
 import {
   completeOnboarding,
   customCategory,
-  exploreDemo,
   hasCategory,
   parseRate,
   suggestedCategories,
@@ -53,7 +52,7 @@ const STEPS = ["welcome", "currency", "account", "categories"] as const;
 const SETUP_STEPS = STEPS.length - 1;
 
 // First-run setup. The root Stack only exposes this route while
-// settings.onboarded is false; finishing (or choosing the demo) flips it and
+// settings.onboarded is false; finishing flips it and
 // the Stack moves to Home on its own.
 export default function OnboardingScreen() {
   const { state, update, setNotice } = useFinance();
@@ -456,16 +455,6 @@ export default function OnboardingScreen() {
                 <Action loading={form.busy} onPress={() => goTo(1)}>
                   {t("onboarding.start")}
                 </Action>
-                <Action
-                  secondary
-                  disabled={form.busy}
-                  onPress={() => void form.run(() => update(exploreDemo))}
-                >
-                  {t("onboarding.demo")}
-                </Action>
-                <Txt size={12} color={colors.muted} style={{ textAlign: "center" }}>
-                  {t("onboarding.demoHint")}
-                </Txt>
                 <OnboardingSignIn />
               </>
             ) : step === "categories" ? (

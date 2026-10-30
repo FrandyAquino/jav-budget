@@ -24,7 +24,7 @@ export const fmt = (cents: number, currency: Currency = "DOP", lang: Language = 
 export const MONTH = monthKey();
 export const TODAY = today();
 
-// A small, non-demo ledger with ids/names that are not starter categories
+// A small ledger with ids/names that are not starter categories
 // (withoutUnusedDefaults would drop unused starter categories on load).
 export function fixture(patch: Partial<FinanceState> = {}): FinanceState {
   const base = emptyState();

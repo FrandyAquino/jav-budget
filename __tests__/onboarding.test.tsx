@@ -1,6 +1,6 @@
 import { renderRouter, screen } from "expo-router/testing-library";
 import { userEvent } from "@testing-library/react-native";
-import { demoState } from "@/features/finance/model";
+import type { FinanceState } from "@/features/finance/model";
 import { en, fixture, fmt, renderApp, seed, stored } from "./helpers/app";
 
 // First launch: nothing is stored, so the app opens on onboarding.
@@ -36,7 +36,7 @@ test("first launch: set up currency, account and categories, then land on Home",
   // Categories: a few are preselected; pick one more and add a custom one.
   expect(await screen.findByText(en("onboarding.categories.title"))).toBeOnTheScreen();
   // Chips with an icon: their accessible name includes the glyph; match the text.
-  await user.press(screen.getByText(en("demo.category.shopping")));
+  await user.press(screen.getByText(en("starter.category.shopping")));
   await user.type(screen.getByLabelText(en("onboarding.categories.customA11y")), "Pets");
   await user.press(screen.getByRole("button", { name: en("onboarding.categories.add") }));
   expect(screen.getByText("Pets")).toBeOnTheScreen();
@@ -50,7 +50,6 @@ test("first launch: set up currency, account and categories, then land on Home",
   expect(screen.getByText(fmt(Math.round(150_000 / 60), "USD"))).toBeOnTheScreen();
 
   const state = await stored();
-  expect(state.demo).toBe(false);
   expect(state.settings).toMatchObject({ onboarded: true, currency: "USD", language: "en" });
   expect(state.settings.exchangeRate).toMatchObject({ dopPerUsd: 60 });
   expect(state.accounts).toEqual([
@@ -58,23 +57,15 @@ test("first launch: set up currency, account and categories, then land on Home",
   ]);
   expect(state.categories.map((c) => c.name).sort()).toEqual(
     [
-      en("demo.category.food"),
-      en("demo.category.transport"),
-      en("demo.category.home"),
-      en("demo.category.shopping"),
-      en("demo.category.salary"),
+      en("starter.category.food"),
+      en("starter.category.transport"),
+      en("starter.category.home"),
+      en("starter.category.shopping"),
+      en("starter.category.salary"),
       "Pets",
     ].sort(),
   );
   expect(state.categories.some((c) => ["food", "shopping", "salary"].includes(c.id))).toBe(false);
-});
-
-test("explore with demo data skips setup", async () => {
-  const user = await firstLaunch();
-  await user.press(screen.getByRole("button", { name: en("onboarding.demo") }));
-  expect(await screen.findByText(en("home.demo.banner"))).toBeOnTheScreen();
-  expect(screen).toHavePathname("/");
-  expect(await stored()).toMatchObject({ demo: true, settings: { onboarded: true } });
 });
 
 test("a quick action or deep link before setup opens onboarding", async () => {
@@ -90,17 +81,14 @@ test("existing data saved before onboarding existed goes straight to Home", asyn
   expect(screen.queryByText(en("onboarding.welcome.title"))).not.toBeOnTheScreen();
 });
 
-test("Start fresh from the demo goes through onboarding", async () => {
-  const demo = demoState();
-  demo.settings.language = "en";
-  await seed(demo);
-  const user = userEvent.setup();
+test("a ledger saved with the removed sample data starts over in onboarding", async () => {
+  const saved = { ...fixture(), demo: true } as FinanceState;
+  saved.settings.language = "en";
+  await seed(saved);
   await renderRouter("./src/app", { initialUrl: "/" });
-  await user.press(await screen.findByText(en("home.demo.cta"), {}, { timeout: 5000 }));
-  await user.press(await screen.findByRole("button", { name: en("home.fresh.confirm") }));
-  expect(await screen.findByText(en("onboarding.welcome.title"))).toBeOnTheScreen();
+  expect(await screen.findByText(en("onboarding.welcome.title"), {}, { timeout: 5000 })).toBeOnTheScreen();
   expect(screen).toHavePathname("/onboarding");
-  expect(await stored()).toMatchObject({ demo: false, accounts: [], settings: { onboarded: false } });
+  expect(await stored()).toMatchObject({ accounts: [], transactions: [], settings: { onboarded: false } });
 });
 
 test("replacing everything with empty data in Settings goes through onboarding", async () => {

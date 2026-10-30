@@ -41,7 +41,6 @@ const transaction = z.object({
 });
 const schema = z.object({
   version: z.literal(SCHEMA_VERSION),
-  demo: z.boolean(),
   // Added after v2 shipped; old data defaults to false so the one-time starter
   // category cleanup (pruneStarterCategoriesOnce) runs for it exactly once.
   starterPruned: z.boolean().default(false),
@@ -166,8 +165,29 @@ export function migrateState(input: unknown): unknown {
     data = migrations[data.version](data);
   return data;
 }
+// Sample (demo) data no longer exists. A ledger saved while it was shown, or a
+// backup of it, keeps only its preferences and goes through onboarding.
+function withoutDemo(data: unknown): unknown {
+  if (!data || typeof data !== "object" || (data as Raw).demo !== true)
+    return data;
+  const raw = data as Raw;
+  const settings =
+    raw.settings && typeof raw.settings === "object" ? raw.settings : {};
+  return {
+    ...raw,
+    starterPruned: true,
+    accounts: [],
+    categories: [],
+    transactions: [],
+    budgets: [],
+    monthlyBudgets: [],
+    recurring: [],
+    goals: [],
+    settings: { ...settings, onboarded: false },
+  };
+}
 export function parseState(input: unknown): FinanceState {
-  const migrated = migrateState(input);
+  const migrated = withoutDemo(migrateState(input));
   const version = (migrated as Raw | null)?.version;
   if (typeof version === "number" && version > SCHEMA_VERSION)
     throw new Error(

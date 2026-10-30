@@ -6,13 +6,11 @@ import {
   amountText,
   dateString,
   defaultCategories,
-  demoState,
   emptyState,
   entryAmount,
   pruneStarterCategoriesOnce,
   saveTransaction,
   today,
-  withoutStarterCategories,
   type FinanceState,
   type Transaction,
 } from "../src/features/finance/model.ts";
@@ -91,21 +89,6 @@ test("starter category cleanup runs once and is persisted", () => {
   const recreated = { ...pruned, categories: [{ ...defaultCategories[0] }] };
   assert.equal(pruneStarterCategoriesOnce(recreated), recreated);
   assert.equal(emptyState().starterPruned, true);
-  assert.equal(demoState().starterPruned, true);
-});
-
-test("start fresh keeps only the user's own categories", () => {
-  const renamed = { ...defaultCategories[0], name: "Groceries" };
-  const custom = { ...defaultCategories[1], id: "pets", name: "Pets" };
-  const kept = withoutStarterCategories([
-    renamed,
-    custom,
-    ...demoState().categories.slice(1),
-  ]);
-  assert.deepEqual(
-    kept.map((c) => c.id),
-    ["food", "pets"],
-  );
 });
 
 test("a headerless CSV row with header-like words is data", () => {

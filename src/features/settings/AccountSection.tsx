@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Action, Card, Section, Sheet, Txt, useTheme } from "@/shared/ui";
 import { useT } from "@/shared/i18n/react";
-import { useFinance } from "@/features/finance/store";
 import { deleteAccount, requestSync, signOut } from "@/features/sync/engine";
 import { SignInForm } from "@/features/sync/SignInForm";
 import { SyncDecisionSheet } from "@/features/sync/SyncDecisionSheet";
@@ -10,7 +9,6 @@ import { useSyncStatus, type SyncErrorCode } from "@/features/sync/status";
 // Optional account: signing in turns on cloud sync and cloud backup.
 export function AccountSection({ onReplaced }: { onReplaced: () => void }) {
   const status = useSyncStatus();
-  const { state } = useFinance();
   const { colors } = useTheme();
   const { t, date } = useT();
   const [deciding, setDeciding] = useState(true);
@@ -68,18 +66,12 @@ export function AccountSection({ onReplaced }: { onReplaced: () => void }) {
             {t(`account.error.${status.error}`)}
           </Txt>
         ) : null}
-        {state.demo && !status.decision ? (
-          <Txt size={13} color={colors.muted}>
-            {t("account.demoPaused")}
-          </Txt>
-        ) : null}
         {status.decision ? (
           <Action onPress={() => setDeciding(true)}>{t("account.reviewDecision")}</Action>
         ) : (
           <Action
             secondary
             loading={syncing}
-            disabled={state.demo}
             onPress={() => void requestSync()}
           >
             {t("account.syncNow")}

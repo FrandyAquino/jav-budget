@@ -21,10 +21,8 @@ import {
 import {
   cents,
   defaultCategories,
-  demoState,
   emptyState,
   money,
-  relabelDemo,
   withoutUnusedDefaults,
 } from "../src/features/finance/model.ts";
 import { planReminders } from "../src/features/finance/storage/reminders.ts";
@@ -128,14 +126,13 @@ test("search folding ignores accents and case", () => {
   assert.ok(foldText("Categoría Ñandú").includes(foldText("categoria nandu")));
 });
 
-test("domain errors, reminders and demo data follow the active language", () => {
+test("domain errors and reminders follow the active language", () => {
   try {
     setLanguage("es");
     assert.equal(t("tabs.home"), "Inicio");
     assert.throws(() => cents("abc"), /Ingresa un monto válido/);
     const [reminder] = planReminders(
       {
-        demo: false,
         settings: { notifications: true },
         recurring: [],
         accounts: [{ id: "visa", name: "Visa", type: "credit", dueDay: 28 }],
@@ -145,80 +142,8 @@ test("domain errors, reminders and demo data follow the active language", () => 
     assert.equal(reminder.title, "Hoy vence una factura");
     assert.equal(reminder.body, "Pago de Visa");
 
-    const demo = demoState();
-    assert.equal(demo.categories.find((c) => c.id === "food")?.name, "Comida y bebidas");
-    assert.equal(demo.accounts.find((a) => a.id === "popular")?.name, "Cuenta principal");
-    // Brand names are not translated.
-    assert.ok(demo.transactions.some((tx) => tx.title === "Supermercado Nacional"));
-    assert.equal(relabelDemo(demo), demo);
-
-    setLanguage("en");
-    const english = relabelDemo(demo);
-    assert.equal(english.categories.find((c) => c.id === "food")?.name, "Food & drinks");
-    assert.equal(english.goals[0].name, "A little time away");
-    assert.ok(english.transactions.some((tx) => tx.title === "Monthly salary"));
-    // Tags are never relabeled: past transactions would keep the old tag.
-    assert.deepEqual(english.recurring[0].tags, demo.recurring[0].tags);
-    assert.equal(relabelDemo(english), english);
-    // With the previous language known, only text in that language is seed text.
-    assert.equal(relabelDemo(demo, "en"), demo);
-    assert.equal(
-      relabelDemo(demo, "es").categories.find((c) => c.id === "food")?.name,
-      "Food & drinks",
-    );
   } finally {
     setLanguage("en");
   }
 });
 
-test("relabeling never touches user-named records or real data", () => {
-  setLanguage("es");
-  try {
-    const renamed = { ...defaultCategories[0], name: "Mi comida" };
-    const custom = { id: "pets", name: "Pets", icon: "heart", color: "#555B65", kind: "expense" as const };
-    const state = {
-      ...emptyState(),
-      categories: [renamed, custom, defaultCategories[1]],
-      goals: [{ id: "travel", name: "My trip", currency: "DOP" as const, target: 100, saved: 0 }],
-    };
-    // Real (non-demo) data is never relabeled, starter-looking or not.
-    assert.equal(relabelDemo(state), state);
-    // In demo mode only seeded ids whose text matches the previous language
-    // are renamed; user-created rules keep their own tags.
-    const demo = {
-      ...state,
-      demo: true,
-      recurring: [
-        {
-          id: "mine",
-          title: "Gym",
-          amount: 100,
-          accountId: "a",
-          categoryId: "food",
-          kind: "expense" as const,
-          note: "",
-          tags: ["subscription"],
-          nextDate: "2026-01-01",
-          anchorDay: 1,
-          frequency: "monthly" as const,
-          active: true,
-          subscription: true,
-        },
-      ],
-    };
-    const next = relabelDemo(demo, "en");
-    assert.deepEqual(
-      next.categories.map((c) => c.name),
-      ["Mi comida", "Pets", "Compras"],
-    );
-    assert.equal(next.goals[0].name, "My trip");
-    assert.deepEqual(next.recurring[0].tags, ["subscription"]);
-    // Untouched seed categories count as defaults in any language.
-    assert.deepEqual(
-      withoutUnusedDefaults(state).categories.map((c) => c.id),
-      ["food", "pets"],
-    );
-  } finally {
-    setLanguage("en");
-  }
-});

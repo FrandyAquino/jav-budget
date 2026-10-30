@@ -35,7 +35,7 @@ npx expo export --platform all
 - CSV import from bank exports with column mapping, preview, and duplicate detection.
 - iOS home-screen widget and quick actions (development build required).
 - Manual savings goals, recurring subscription labels, device authentication, and local bill reminders.
-- Validated JSON backup/restore and explicit demo data controls.
+- Validated JSON backup/restore.
 
 ## Architecture
 
@@ -45,7 +45,7 @@ Expo Router async routes are explicitly disabled. SDK 58 enables them on web by 
 
 Amounts are integer cents. Account balances and budget totals are derived from transactions. Transfers are one record affecting both accounts and do not count as income or expenses. Writes are validated and persisted before the UI reports success. Web writes use Web Locks where supported to coordinate tabs. Invalid stored data is preserved and presents a recovery error rather than silently resetting it.
 
-The first launch requires email sign-in, then opens onboarding (language, currency, first account and categories) or clearly labeled sample data. Financial screens remain unavailable until the session matches the local ledger's owner. SQLite on iOS/Android and localStorage on web persist data offline. There is no bank integration. On iOS/Android the ledger is encrypted with SQLCipher (`jav-budget-secure.db`) using a key in the system keychain/keystore; Expo Go lacks SQLCipher and uses an unencrypted file. Web storage is not encrypted. Export backups before clearing app/browser storage.
+The first launch requires email sign-in, then opens onboarding (language, currency, first account and categories). There is no sample (demo) data; a ledger saved with the old sample data starts over in onboarding. Financial screens remain unavailable until the session matches the local ledger's owner. SQLite on iOS/Android and localStorage on web persist data offline. There is no bank integration. On iOS/Android the ledger is encrypted with SQLCipher (`jav-budget-secure.db`) using a key in the system keychain/keystore; Expo Go lacks SQLCipher and uses an unencrypted file. Web storage is not encrypted. Export backups before clearing app/browser storage.
 
 ## Account access and cloud sync
 
@@ -58,7 +58,7 @@ Automatic backups are separated in `Documents/Backups/<user id>`. Legacy backups
 - `src/features/sync/core.ts` holds the pure rules (unit-tested in `tests/sync.test.mts`); `engine.ts` does the I/O.
 - Every local write records the changed records/settings in an outbox (same SQLite transaction on native, same Web Lock on web). Pushes upsert `sync_records`/`sync_meta` (deletes are tombstones); pulls page by `server_updated_at` (with a 60 s overlap) and apply through `parseState`. Last write wins on the client timestamp: a pending local change newer than the cloud copy is kept. Rows that don't validate yet (e.g. a transaction whose account hasn't arrived) are parked and retried.
 - Synced: accounts, categories, transactions, budgets, monthly budgets, recurring rules, goals, and the name, email, currency, number entry and exchange rate. Device-local: appearance, language, app lock, notifications, app icon, automatic backups, last export, onboarding and demo flags.
-- First sign-in: an empty device downloads; an empty cloud receives this device's data; when both have data you choose Merge (union by id, newest change wins), Replace this device, or Cancel. Sample data is never uploaded. A device that synced with another account must be replaced before it syncs with a new one. Signing out keeps or erases this device's copy. Settings → Account & sync → Delete account removes the receipt photos, then calls `delete_account()` (the user's sync rows cascade), keeping or erasing this device's copy.
+- First sign-in: an empty device downloads; an empty cloud receives this device's data; when both have data you choose Merge (union by id, newest change wins), Replace this device, or Cancel. A device that synced with another account must be replaced before it syncs with a new one. Signing out keeps or erases this device's copy. Settings → Account & sync → Delete account removes the receipt photos, then calls `delete_account()` (the user's sync rows cascade), keeping or erasing this device's copy.
 - Sync runs after sign-in, on launch and foreground, 2 s after local changes, from "Sync now", and in the background task. Receipt photos upload to the private `receipts` bucket (`<user id>/<file>`), download in the background or on view, and are removed when no transaction uses them. Web receipts are page-lifetime blobs, so web doesn't upload them; it shows synced photos through signed URLs.
 
 ## Crash reports and updates
@@ -69,7 +69,7 @@ Release builds report crashes to Sentry when `EXPO_PUBLIC_SENTRY_DSN` is set (`s
 
 Due entries are processed on launch, foregrounding, and midnight while the app is running. Missed occurrences catch up on reopening; processing is capped at 600 occurrences per rule per pass. This is local bookkeeping, not automatic bank payments or guaranteed background execution. Month-end schedules retain their original anchor day.
 
-Native reminders schedule several upcoming occurrences per active expense rule plus credit-card due dates, nearest first, capped at 60 (under the iOS limit of 64). A background task (expo-background-task) also processes due entries and refreshes reminders when the OS allows it. Delivery depends on OS permissions and settings. Demo data never schedules notifications. Savings goals are manual progress records and do not move account funds.
+Native reminders schedule several upcoming occurrences per active expense rule plus credit-card due dates, nearest first, capped at 60 (under the iOS limit of 64). A background task (expo-background-task) also processes due entries and refreshes reminders when the OS allows it. Delivery depends on OS permissions and settings. Savings goals are manual progress records and do not move account funds.
 
 ## Validation
 
@@ -107,7 +107,7 @@ Test setup lives in `jest.config.js`, `jest.setup.ts` and `__mocks__/`:
 
 ### End-to-end (Maestro)
 
-Flows live in `.maestro/flows/` and cover the same journeys. Each flow starts from a fresh install via `.maestro/subflows/launch-fresh.yaml` (`clearState`), which picks "Explore with demo data" on the onboarding so it runs against the labeled sample data. The flows match English text, so use a simulator set to English.
+Flows live in `.maestro/flows/` and cover the same journeys. Each flow starts from a fresh install via `.maestro/subflows/launch-fresh.yaml` (`clearState`). **Out of date:** the flows predate the sign-in gate and the removal of sample data; they need a signed-in test account and seeded data before they run again. The flows match English text, so use a simulator set to English.
 
 ```sh
 # 1. Install Maestro: https://docs.maestro.dev/getting-started/installing-maestro

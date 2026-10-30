@@ -118,5 +118,4 @@ export default createWidget("BudgetWidget", BudgetWidget, {
   budgetOver: false,
   netWorth: "—",
   netWorthAlt: "",
-  demo: false,
 });
