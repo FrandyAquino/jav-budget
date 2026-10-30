@@ -32,6 +32,7 @@ export const SHARED_SETTINGS = [
   "numberEntry",
   "exchangeRate",
   "budgetPeriod",
+  "primaryAccountId",
 ] as const satisfies readonly (keyof Settings)[];
 export type SharedSetting = (typeof SHARED_SETTINGS)[number];
 // Never uploaded nor applied from the cloud: they describe this device

@@ -2,6 +2,7 @@ import { View, Pressable, useWindowDimensions } from "react-native";
 import { router } from "expo-router";
 import {
   currencySymbol,
+  type Account,
   type Currency,
   type DateRange,
   type FinanceState,
@@ -17,6 +18,7 @@ const currencies: Currency[] = ["DOP", "USD"];
 // default-currency balance with a gentle prompt to set a rate.
 export function NetWorthHero({
   state,
+  account,
   scope,
   onScopeChange,
   worth,
@@ -26,6 +28,8 @@ export function NetWorthHero({
   upcoming,
 }: {
   state: FinanceState;
+  // The user's main account; the hero then shows only its balance.
+  account?: Account;
   // Set when some accounts are savings; the hero then offers both views.
   scope?: "available" | "all";
   onScopeChange: (scope: "available" | "all") => void;
@@ -65,20 +69,28 @@ export function NetWorthHero({
       <Row style={{ justifyContent: "space-between" }}>
         <Row style={{ gap: 7 }}>
           <Txt size={12} color={colors.accent}>
-            {t(
-              scope === "available"
-                ? "home.hero.available"
-                : combined
-                  ? "home.hero.netWorth"
-                  : "home.hero.totalBalance",
-            )}
+            {account
+              ? account.name.toUpperCase()
+              : t(
+                  scope === "available"
+                    ? "home.hero.available"
+                    : combined
+                      ? "home.hero.netWorth"
+                      : "home.hero.totalBalance",
+                )}
           </Txt>
-          <Icon name="layers" size={13} color={colors.accent} />
+          <Icon
+            name={account ? "credit-card" : "layers"}
+            size={13}
+            color={colors.accent}
+          />
         </Row>
         <Txt size={11} color={colors.accent}>
-          {t(combined ? "home.hero.allIn" : "home.hero.currencyAccounts", {
-            currency,
-          })}
+          {account
+            ? t("home.hero.primaryAccount")
+            : t(combined ? "home.hero.allIn" : "home.hero.currencyAccounts", {
+                currency,
+              })}
         </Txt>
       </Row>
       {scope && (

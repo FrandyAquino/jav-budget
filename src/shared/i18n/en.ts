@@ -340,6 +340,7 @@ export const en = {
   "home.hero.setRateBody": "Add a DOP/USD rate to see your combined net worth",
   "home.hero.setRate": "Set rate →",
   "home.hero.netProjected": "{amount} net projected cash flow",
+  "home.hero.primaryAccount": "Main account",
   "home.hero.netPeriod": "{amount} net cash flow in this period",
 
   // Activity
@@ -790,6 +791,9 @@ export const en = {
   "preferences.usd": "US dollar",
   "preferences.currencyHint":
     "Used for new entries and reports. Selecting an account in another currency uses that account’s currency. Existing amounts are never converted.",
+  "preferences.primaryAccount": "Home balance",
+  "preferences.primaryAll": "All accounts",
+  "preferences.primaryAllDetail": "Combined balance of every account",
   "preferences.numberEntry": "Number entry",
   "preferences.decimal": "Decimal keypad",
   "preferences.decimalDetail": "Type 12.50 for 12.50",

@@ -86,6 +86,38 @@ export function PreferencesSection() {
         {t("preferences.currencyHint")}
       </Txt>
       <ExchangeRateSetting />
+      {state.accounts.length > 1 && (
+        <SelectField
+          label={t("preferences.primaryAccount")}
+          value={
+            state.accounts.some((a) => a.id === state.settings.primaryAccountId)
+              ? state.settings.primaryAccountId!
+              : ""
+          }
+          options={[
+            {
+              value: "",
+              label: t("preferences.primaryAll"),
+              detail: t("preferences.primaryAllDetail"),
+              icon: "layers",
+            },
+            ...state.accounts.map((a) => ({
+              value: a.id,
+              label: a.name,
+              detail: `${t(`accountType.${a.type}`)} · ${a.currency}`,
+              icon: a.type === "cash" ? "dollar-sign" : "credit-card",
+            })),
+          ]}
+          onChange={(id) =>
+            void form.run(() =>
+              update((s) => ({
+                ...s,
+                settings: { ...s.settings, primaryAccountId: id || undefined },
+              })),
+            )
+          }
+        />
+      )}
       <SelectField
         label={t("preferences.numberEntry")}
         value={state.settings.numberEntry ?? "decimal"}

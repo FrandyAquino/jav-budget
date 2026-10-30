@@ -51,9 +51,27 @@ export default function HomeScreen() {
   // Savings accounts can be left out of the hero; "all" shows every account.
   const [scope, setScope] = useState<"available" | "all">("available");
   const hasSavings = state.accounts.some((a) => a.excludeFromTotal);
-  const heroState =
-    hasSavings && scope === "available" ? availableState(state) : state;
-  const worth = netWorth(heroState, currency);
+  // A chosen main account replaces the combined balance in the hero.
+  const primary = state.accounts.find(
+    (a) => a.id === state.settings.primaryAccountId,
+  );
+  const heroState = primary
+    ? { ...state, accounts: [primary] }
+    : hasSavings && scope === "available"
+      ? availableState(state)
+      : state;
+  const worth = netWorth(heroState, primary?.currency ?? currency);
+  const heroRows = primary
+    ? report.rows.filter((t) => t.accountId === primary.id)
+    : report.rows;
+  const heroTotal = (kind: Kind) =>
+    primary
+      ? heroRows
+          .filter((t) => t.kind === kind)
+          .reduce((v, t) => v + t.amount, 0)
+      : kind === "income"
+        ? report.income
+        : report.expense;
   return (
     <Screen
       title={
@@ -81,12 +99,13 @@ export default function HomeScreen() {
           <View key="main" style={{ gap: 24 }}>
             <NetWorthHero
               state={heroState}
-              scope={hasSavings ? scope : undefined}
+              account={primary}
+              scope={hasSavings && !primary ? scope : undefined}
               onScopeChange={setScope}
               worth={worth}
               range={period.range}
-              income={report.income}
-              expense={report.expense}
+              income={heroTotal("income")}
+              expense={heroTotal("expense")}
               upcoming={report.mode === "upcoming"}
             />
             <QuickActions onAdd={setQuickAdd} />

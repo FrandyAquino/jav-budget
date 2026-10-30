@@ -93,6 +93,9 @@ export type Settings = {
   biometrics: boolean;
   notifications: boolean;
   exchangeRate?: ExchangeRate;
+  // Account the home hero shows instead of the combined balance; a missing
+  // or deleted account falls back to every account.
+  primaryAccountId?: string;
   // Budget period length; parseState fills "monthly".
   budgetPeriod?: "monthly" | "biweekly";
   // Native automatic daily backups; parseState fills true.

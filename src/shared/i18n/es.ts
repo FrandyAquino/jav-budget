@@ -349,6 +349,7 @@ export const es: Dictionary = {
     "Añade una tasa DOP/USD para ver tu patrimonio neto combinado",
   "home.hero.setRate": "Definir tasa →",
   "home.hero.netProjected": "{amount} de flujo neto proyectado",
+  "home.hero.primaryAccount": "Cuenta principal",
   "home.hero.netPeriod": "{amount} de flujo neto en este período",
 
   // Activity
@@ -810,6 +811,9 @@ export const es: Dictionary = {
   "preferences.usd": "Dólar estadounidense",
   "preferences.currencyHint":
     "Se usa para los movimientos nuevos y los reportes. Si eliges una cuenta en otra moneda, se usa la moneda de esa cuenta. Los montos existentes nunca se convierten.",
+  "preferences.primaryAccount": "Balance en inicio",
+  "preferences.primaryAll": "Todas las cuentas",
+  "preferences.primaryAllDetail": "Balance combinado de todas las cuentas",
   "preferences.numberEntry": "Entrada de números",
   "preferences.decimal": "Teclado decimal",
   "preferences.decimalDetail": "Escribe 12.50 para 12.50",

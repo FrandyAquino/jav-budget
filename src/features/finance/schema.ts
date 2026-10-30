@@ -122,6 +122,7 @@ const schema = z.object({
     biometrics: z.boolean(),
     notifications: z.boolean(),
     budgetPeriod: z.enum(["monthly", "biweekly"]).default("monthly"),
+    primaryAccountId: z.string().min(1).max(80).optional(),
     exchangeRate: z
       .object({
         dopPerUsd: z.number().refine(validRate, "Invalid exchange rate"),
