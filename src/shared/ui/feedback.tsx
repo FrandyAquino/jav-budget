@@ -37,6 +37,11 @@ export function Sheet({
     >
       <BottomSheet.Content
         size="auto"
+        // Mobile browsers turn scrolling a form with the keyboard up into
+        // drags and stray backdrop taps that closed the sheet mid-entry. On
+        // web only the close button (and the form's own actions) close it.
+        dismissible={Platform.OS !== "web"}
+        showGrabber={Platform.OS !== "web"}
         style={{
           backgroundColor: colors.surface,
           width: "100%",

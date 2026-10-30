@@ -117,12 +117,24 @@ export function formatAmountInput(raw: string, mode: Settings["numberEntry"]) {
     ? group(whole)
     : `${group(whole || "0")}.${fraction}`;
 }
-export function parseAmountInput(text: string, mode: Settings["numberEntry"]) {
+// `previous` is the text the field showed before this change: its grouping
+// commas are never decimals, so deleting a digit from "1,234" gives 123, not
+// 1.23. Only a newly typed or pasted comma can be the decimal separator.
+export function parseAmountInput(
+  text: string,
+  mode: Settings["numberEntry"],
+  previous = "",
+) {
   if (mode === "cents")
     return text.replace(/\D/g, "").replace(/^0+/, "").slice(0, 12);
   let value = text.trim();
+  const commas = (s: string) => s.split(",").length - 1;
   // A typed or pasted comma used as the decimal separator ("12," / "12,50").
-  if (!value.includes(".") && /^[\d,]*,\d{0,2}$/.test(value)) {
+  if (
+    commas(value) > commas(previous) &&
+    !value.includes(".") &&
+    /^[\d,]*,\d{0,2}$/.test(value)
+  ) {
     const at = value.lastIndexOf(",");
     if (!/,\d{3}$/.test(value))
       value = `${value.slice(0, at).replace(/,/g, "")}.${value.slice(at + 1)}`;

@@ -243,6 +243,9 @@ test("amount inputs group thousands while keeping the canonical text", () => {
   assert.equal(parseAmountInput("12,", "decimal"), "12.");
   assert.equal(parseAmountInput("12,50", "decimal"), "12.50");
   assert.equal(parseAmountInput("1,234", "decimal"), "1234");
+  // Deleting a digit from "1,234" keeps the comma a thousands separator.
+  assert.equal(parseAmountInput("1,23", "decimal", "1,234"), "123");
+  assert.equal(parseAmountInput("1,234,", "decimal", "1,234"), "1234.");
   assert.equal(parseAmountInput("0012.345", "decimal"), "12.34");
   assert.equal(parseAmountInput(".5", "decimal"), "0.5");
   assert.equal(formatAmountInput("123456", "cents"), "1,234.56");
@@ -251,7 +254,7 @@ test("amount inputs group thousands while keeping the canonical text", () => {
   assert.equal(parseAmountInput("0.0", "cents"), "");
 });
 
-test("transfers accept only transfer categories and count as category usage", () => {
+test("transfers take any existing category and count as category usage", () => {
   const savings = { id: "savings", name: "Savings", icon: "box", color: "#356C56", kind: "transfer" as const };
   const state: FinanceState = {
     ...fixture(),
@@ -262,7 +265,8 @@ test("transfers accept only transfer categories and count as category usage", ()
   const saved = saveTransaction(state, move);
   assert.equal(saved.transactions[0].categoryId, "savings");
   assert.ok(categoryInUse(saved, "savings"));
-  assert.throws(() => saveTransaction(state, { ...move, categoryId: "food" }));
+  assert.equal(saveTransaction(state, { ...move, categoryId: "food" }).transactions[0].categoryId, "food");
+  assert.throws(() => saveTransaction(state, { ...move, categoryId: "missing" }));
   assert.equal(saveTransaction(state, { ...move, categoryId: "" }).transactions[0].categoryId, "");
   assert.equal(netWorth(availableState(saved), "DOP").byCurrency.DOP, 99000);
   assert.equal(netWorth(saved, "DOP").byCurrency.DOP, 100000);

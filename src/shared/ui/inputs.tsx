@@ -37,11 +37,12 @@ export function AmountField({
   value: string;
   onChangeText: (raw: string) => void;
 }) {
+  const shown = formatAmountInput(value, mode);
   return (
     <Field
       {...props}
-      value={formatAmountInput(value, mode)}
-      onChangeText={(text) => onChangeText(parseAmountInput(text, mode))}
+      value={shown}
+      onChangeText={(text) => onChangeText(parseAmountInput(text, mode, shown))}
       keyboardType={mode === "cents" ? "number-pad" : "decimal-pad"}
       inputMode={mode === "cents" ? "numeric" : "decimal"}
     />

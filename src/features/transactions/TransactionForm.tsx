@@ -371,11 +371,16 @@ export function TransactionForm({
                 onChange={setCategory}
                 options={[
                   { value: "", label: t("txForm.noCategory"), icon: "minus" },
-                  ...kindCategories("transfer").map((c) => ({
-                    value: c.id,
-                    label: c.name,
-                    icon: c.icon,
-                  })),
+                  // Transfer categories first, then the user's other ones.
+                  ...(["transfer", "expense", "income"] as const).flatMap(
+                    (group) =>
+                      kindCategories(group).map((c) => ({
+                        value: c.id,
+                        label: c.name,
+                        icon: c.icon,
+                        detail: t(`kind.${group}`),
+                      })),
+                  ),
                 ]}
                 onCreate={() => setCreatingCategory(true)}
               />

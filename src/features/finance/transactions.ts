@@ -111,12 +111,8 @@ export function validateTransaction(
       throw new Error(tr("errors.transferReceived"));
     if (destination.currency === account.currency && tx.received !== tx.amount)
       throw new Error(tr("errors.transferMismatch"));
-    if (
-      tx.categoryId &&
-      !state.categories.some(
-        (c) => c.id === tx.categoryId && c.kind === "transfer",
-      )
-    )
+    // Optional label; any category works (it never counts as spending).
+    if (tx.categoryId && !state.categories.some((c) => c.id === tx.categoryId))
       throw new Error(tr("errors.categoryMismatch"));
   } else if (
     !state.categories.some((c) => c.id === tx.categoryId && c.kind === tx.kind)
