@@ -146,13 +146,28 @@ export function subscribe(listener: Listener, onError: () => void) {
   listeners.add(listener);
   const refresh = (event: StorageEvent) => {
     if (event.key !== null && event.key !== LEGACY_KEY && event.key !== SYNC_KEY) return;
-    // A different tab may be replacing the shared ledger for another account.
-    // Close the gate before publishing any external snapshot.
-    setSyncStatus({ ledgerUserId: null });
+    // Another tab wrote the shared ledger or its sync bookkeeping. Its own
+    // sync cycles do this for the same account all the time (lastSyncedAt), so
+    // the gate only closes when the stored owner no longer matches this
+    // session: another account may be replacing the ledger. Until the read
+    // below, this tab still shows its own (same-owner) copy, and writes are
+    // checked against the stored owner (requireLedgerOwner).
     void syncTransact((base, local) => {
-      if (base && local.values.userId === getSyncStatus().user?.id) listener(base);
-      return { result: undefined };
-    }).catch(onError).finally(notifyOutbox);
+      const user = getSyncStatus().user?.id;
+      const owned =
+        !!user &&
+        local.values.userId === user &&
+        local.values.bootstrapped === user;
+      if (!owned) setSyncStatus({ ledgerUserId: null });
+      if (base && user && local.values.userId === user) listener(base);
+      // Only pending changes need a sync here; the other tab's own cycle
+      // already pushed its work, and syncing back would bounce between tabs.
+      return { result: Object.keys(local.outbox).length > 0 };
+    })
+      .then((pending) => {
+        if (pending) notifyOutbox();
+      })
+      .catch(onError);
   };
   if (typeof window !== "undefined") window.addEventListener("storage", refresh);
   return () => {
