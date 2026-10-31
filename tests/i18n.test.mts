@@ -108,6 +108,11 @@ test("dates use the language's month names and order", () => {
   assert.equal(monthLabel("2026-10", "es"), "Octubre 2026");
   assert.equal(monthName("2026-10", "es"), "octubre");
   assert.equal(monthName("2026-10", "es", "short", true), "Oct");
+  assert.equal(monthLabel("2026-11-Q1", "es"), "30 oct–14 nov 2026");
+  assert.equal(monthLabel("2026-11-Q1", "en"), "Oct 30–Nov 14, 2026");
+  assert.equal(monthLabel("2026-11-Q2", "es"), "15–29 nov 2026");
+  assert.equal(monthName("2026-11-Q2", "en"), "Nov 15–29");
+  assert.equal(monthName("2027-01-Q1", "es"), "30 dic–14 ene");
   assert.equal(dayLabel("2026-10-25", "2026-10-25", "2026-10-24", "es"), "Hoy");
   assert.equal(dayLabel("2026-10-24", "2026-10-25", "2026-10-24", "en"), "Yesterday");
   assert.equal(

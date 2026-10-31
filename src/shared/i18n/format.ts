@@ -1,5 +1,6 @@
 // Locale-aware date/number formatting. Pure TS (no React Native imports).
 import { getLanguage, getLocale, translate, type Language } from "./core.ts";
+import { periodRange } from "../../features/finance/dates.ts";
 
 // "YYYY-MM-DD" and "YYYY-MM" are local calendar values; anchor them at noon so
 // time zones never shift the day.
@@ -44,16 +45,21 @@ export function smartDate(value: string | Date, lang: Language = getLanguage()) 
 function capitalize(text: string, lang: Language) {
   return text.charAt(0).toLocaleUpperCase(getLocale(lang)) + text.slice(1);
 }
-// Half-month budget periods ("2026-10-Q1"): "Oct 1–15" / "1–15 oct".
+// Half-month budget periods ("2026-11-Q1"), payday to payday:
+// "Oct 30–Nov 14" / "30 oct–14 nov", "Nov 15–29" / "15–29 nov".
 function halfLabel(period: string, lang: Language, year: boolean) {
-  const month = period.slice(0, 7);
-  const [y, m] = month.split("-").map(Number);
-  const days = period.endsWith("Q1")
-    ? "1–15"
-    : `16–${new Date(y, m, 0).getDate()}`;
-  const name = formatDate(month, { month: "short" }, lang).replace(/\.$/, "");
-  if (lang === "es") return `${days} ${name}${year ? ` ${y}` : ""}`;
-  return `${name} ${days}${year ? `, ${y}` : ""}`;
+  const { from, to } = periodRange(period);
+  const name = (date: string) =>
+    formatDate(date.slice(0, 7), { month: "short" }, lang).replace(/\.$/, "");
+  const [fromDay, toDay] = [Number(from.slice(8)), Number(to.slice(8))];
+  const sameMonth = from.slice(0, 7) === to.slice(0, 7);
+  const y = to.slice(0, 4);
+  if (lang === "es") {
+    const start = sameMonth ? `${fromDay}` : `${fromDay} ${name(from)}`;
+    return `${start}–${toDay} ${name(to)}${year ? ` ${y}` : ""}`;
+  }
+  const end = sameMonth ? `${toDay}` : `${name(to)} ${toDay}`;
+  return `${name(from)} ${fromDay}–${end}${year ? `, ${y}` : ""}`;
 }
 const isHalf = (value: string | Date) =>
   typeof value === "string" && /^\d{4}-\d{2}-Q[12]$/.test(value);

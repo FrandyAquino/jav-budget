@@ -22,8 +22,9 @@ export function shiftMonth(month: string, offset: number) {
   const d = new Date(y, m - 1 + offset, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
-// Budget periods: a month ("2026-10") or a half of it ("2026-10-Q1" covers
-// days 1-15, "2026-10-Q2" day 16 to the end of the month).
+// Budget periods: a month ("2026-10") or a payday-to-payday half. Paydays are
+// the 15th and the 30th (the last day in February): "2026-11-Q1" runs from
+// Oct 30 to Nov 14, "2026-11-Q2" from Nov 15 to Nov 29.
 export type BudgetPeriod = "monthly" | "biweekly";
 export function validPeriod(period: string) {
   return validMonth(period) || /^\d{4}-(0[1-9]|1[0-2])-Q[12]$/.test(period);
@@ -31,18 +32,32 @@ export function validPeriod(period: string) {
 export function isHalfPeriod(period: string) {
   return period.length === 10;
 }
+function lastDay(month: string) {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(y, m, 0).getDate();
+}
+// The month-end payday: the 30th, or the last day of shorter months.
+function monthEndPayday(month: string) {
+  return Math.min(30, lastDay(month));
+}
+function day(month: string, value: number) {
+  return `${month}-${String(value).padStart(2, "0")}`;
+}
 export function periodKey(kind: BudgetPeriod = "monthly", date = today()) {
-  if (kind === "monthly") return monthKey(date);
-  return `${monthKey(date)}-Q${Number(date.slice(8, 10)) <= 15 ? 1 : 2}`;
+  const month = monthKey(date);
+  if (kind === "monthly") return month;
+  const d = Number(date.slice(8, 10));
+  if (d >= monthEndPayday(month)) return `${shiftMonth(month, 1)}-Q1`;
+  return `${month}-Q${d < 15 ? 1 : 2}`;
 }
 export function periodRange(period: string): DateRange {
   const month = period.slice(0, 7);
-  const [y, m] = month.split("-").map(Number);
-  const last = `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
-  if (!isHalfPeriod(period)) return { from: `${month}-01`, to: last };
-  return period.endsWith("Q1")
-    ? { from: `${month}-01`, to: `${month}-15` }
-    : { from: `${month}-16`, to: last };
+  if (!isHalfPeriod(period))
+    return { from: day(month, 1), to: day(month, lastDay(month)) };
+  if (period.endsWith("Q2"))
+    return { from: day(month, 15), to: day(month, monthEndPayday(month) - 1) };
+  const previous = shiftMonth(month, -1);
+  return { from: day(previous, monthEndPayday(previous)), to: day(month, 14) };
 }
 export function shiftPeriod(period: string, offset: number) {
   if (!isHalfPeriod(period)) return shiftMonth(period, offset);

@@ -201,16 +201,43 @@ test("copyBudgets copies only missing category and overall budgets", () => {
   assert.throws(() => copyBudgets(state, "bad", "2020-02"));
 });
 
-test("half-month periods cover days 1-15 and 16 to the month end", () => {
-  assert.equal(periodKey("biweekly", "2024-02-15"), "2024-02-Q1");
-  assert.equal(periodKey("biweekly", "2024-02-16"), "2024-02-Q2");
+test("half-month periods run from payday to payday (30th and 15th)", () => {
+  assert.equal(periodKey("biweekly", "2026-10-29"), "2026-10-Q2");
+  assert.equal(periodKey("biweekly", "2026-10-30"), "2026-11-Q1");
+  assert.equal(periodKey("biweekly", "2026-10-31"), "2026-11-Q1");
+  assert.equal(periodKey("biweekly", "2026-11-14"), "2026-11-Q1");
+  assert.equal(periodKey("biweekly", "2026-11-15"), "2026-11-Q2");
+  assert.equal(periodKey("biweekly", "2026-12-30"), "2027-01-Q1");
+  // February has no 30th: its last day is payday.
+  assert.equal(periodKey("biweekly", "2024-02-28"), "2024-02-Q2");
+  assert.equal(periodKey("biweekly", "2024-02-29"), "2024-03-Q1");
+  assert.equal(periodKey("biweekly", "2025-02-28"), "2025-03-Q1");
   assert.equal(periodKey("monthly", "2024-02-16"), "2024-02");
-  assert.deepEqual(periodRange("2024-02-Q2"), { from: "2024-02-16", to: "2024-02-29" });
+  assert.deepEqual(periodRange("2026-11-Q1"), { from: "2026-10-30", to: "2026-11-14" });
+  assert.deepEqual(periodRange("2026-11-Q2"), { from: "2026-11-15", to: "2026-11-29" });
+  assert.deepEqual(periodRange("2024-03-Q1"), { from: "2024-02-29", to: "2024-03-14" });
+  assert.deepEqual(periodRange("2024-02-Q2"), { from: "2024-02-15", to: "2024-02-28" });
+  assert.deepEqual(periodRange("2027-01-Q1"), { from: "2026-12-30", to: "2027-01-14" });
   assert.deepEqual(periodRange("2024-02"), { from: "2024-02-01", to: "2024-02-29" });
   assert.equal(shiftPeriod("2024-12-Q2", 1), "2025-01-Q1");
   assert.equal(shiftPeriod("2025-01-Q1", -1), "2024-12-Q2");
   assert.equal(shiftPeriod("2025-01-Q1", -3), "2024-11-Q2");
   assert.ok(validPeriod("2025-01-Q2") && !validPeriod("2025-01-Q3"));
+});
+
+test("an expense on payday counts toward the half that starts that day", () => {
+  const state: FinanceState = {
+    ...fixture(),
+    transactions: [
+      tx({ date: "2020-01-30", amount: 1650 }),
+      tx({ date: "2020-01-29", amount: 900 }),
+    ],
+  };
+  const next = budget({ id: "q1", month: "2020-02-Q1", limit: 7900 });
+  assert.equal(budgetStatus(state, next).spent, 1650);
+  assert.equal(budgetStatus(state, next).available, 6250);
+  const before = budget({ id: "q2", month: "2020-01-Q2", limit: 7900 });
+  assert.equal(budgetStatus(state, before).spent, 900);
 });
 
 test("half-month budgets count only their own days and roll over from the previous half", () => {
