@@ -6,6 +6,7 @@ import { processRecurring } from "../model";
 import { parseState } from "../schema";
 import { syncReminders } from "../device";
 import { transact } from "./backend";
+import { refreshWidget } from "./background-widget";
 import { runAutoBackup } from "@/features/backup/files";
 import { backgroundSync } from "@/features/sync/engine";
 import { canAccessLedger } from "@/features/sync/status";
@@ -27,6 +28,7 @@ if (!TaskManager.isTaskDefined(RECURRING_TASK))
       // Daily automatic backup (never throws; skipped for empty/unchanged data).
       if (state) await runAutoBackup(state);
       if (state) await syncReminders(state);
+      if (state) await refreshWidget(state);
       // Cloud sync when signed in (bounded; never throws).
       if (state) await backgroundSync();
       return BackgroundTask.BackgroundTaskResult.Success;

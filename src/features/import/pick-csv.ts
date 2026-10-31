@@ -23,11 +23,16 @@ export async function pickCsv(): Promise<
   const asset = result.assets[0];
   if ((asset.size ?? 0) > MAX_CSV_BYTES)
     throw new Error(t("import.tooLarge"));
+  // The picker's size can be missing: check the file's own size before reading.
   let text: string;
-  if (Platform.OS === "web" && asset.file) text = await asset.file.text();
-  else {
+  if (Platform.OS === "web" && asset.file) {
+    if (asset.file.size > MAX_CSV_BYTES) throw new Error(t("import.tooLarge"));
+    text = await asset.file.text();
+  } else {
     const { File } = await import("expo-file-system");
-    text = await new File(asset.uri).text();
+    const file = new File(asset.uri);
+    if ((file.size ?? 0) > MAX_CSV_BYTES) throw new Error(t("import.tooLarge"));
+    text = await file.text();
   }
   if (text.length > MAX_CSV_BYTES)
     throw new Error(t("import.tooLarge"));

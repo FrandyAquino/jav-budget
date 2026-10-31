@@ -42,8 +42,9 @@ let cache: Cache | undefined;
 const listeners = new Set<Listener>();
 
 // The ledger file is encrypted with SQLCipher using a random 256-bit key kept
-// in the iOS keychain / Android keystore. A build without SQLCipher (Expo Go)
-// keeps using the older unencrypted file.
+// in the iOS keychain / Android keystore. A development build without
+// SQLCipher (Expo Go) keeps using the older unencrypted file; a release build
+// without it refuses to open the ledger (see openSecure).
 const PLAIN_DB = "jav-budget.db";
 const SECURE_DB = "jav-budget-secure.db";
 const KEY_ITEM = "jav-budget.db-key";
@@ -124,6 +125,11 @@ async function openSecure(): Promise<Db> {
   const db = await SQLite.openDatabaseAsync(SECURE_DB);
   if (!(await db.getFirstAsync("PRAGMA cipher_version"))) {
     await db.closeAsync();
+    // Only Expo Go / a dev client without SQLCipher gets here. A release build
+    // always links SQLCipher (app.json expo-sqlite useSQLCipher), so this means
+    // a broken build: fail closed rather than write the ledger in plaintext,
+    // and keep any encrypted file untouched.
+    if (!__DEV__) throw new Error("SQLCipher is unavailable; refusing to open the ledger unencrypted.");
     await SQLite.deleteDatabaseAsync(SECURE_DB).catch(() => {});
     const plain = await SQLite.openDatabaseAsync(PLAIN_DB);
     await plain.execAsync(SCHEMA);
@@ -202,8 +208,11 @@ async function apply(db: Db, diff: StateDiff) {
   for (const { collection, id } of diff.deletes)
     await db.runAsync(`DELETE FROM ${table(collection)} WHERE id = ?`, id);
   const byCollection = new Map<string, typeof diff.upserts>();
-  for (const row of diff.upserts)
-    byCollection.set(row.collection, [...(byCollection.get(row.collection) ?? []), row]);
+  for (const row of diff.upserts) {
+    const rows = byCollection.get(row.collection);
+    if (rows) rows.push(row);
+    else byCollection.set(row.collection, [row]);
+  }
   for (const [collection, rows] of byCollection) {
     const statement = await db.prepareAsync(
       `INSERT INTO ${table(collection)} (id, data, position) VALUES (?, ?, ?)

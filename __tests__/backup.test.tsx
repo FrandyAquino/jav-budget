@@ -2,6 +2,12 @@ import { fireEvent, screen, waitFor } from "expo-router/testing-library";
 import { en, enI18n, fixture, renderApp, stored, TODAY } from "./helpers/app";
 import { setSyncStatus } from "@/features/sync/status";
 import { backupNow, cachedBackups, listBackups, readBackup, shareBackup } from "@/features/backup/files";
+import { SEALED_PREFIX, sealBackup } from "@/features/backup/crypto";
+import { exportBackup, pickBackup } from "@/features/finance/device";
+
+jest.mock("expo-crypto", () => require("./helpers/aes-mock").aesMock());
+jest.mock("expo-secure-store", () => require("./helpers/aes-mock").secureStoreMock());
+jest.mock("expo-document-picker", () => ({ getDocumentAsync: jest.fn() }));
 
 // In-memory stand-in for the expo-file-system File/Directory API (SDK 58).
 jest.mock("expo-file-system", () => {
@@ -84,6 +90,8 @@ const fs = jest.requireMock("expo-file-system") as {
   __dirs: Set<string>;
 };
 const sharing = jest.requireMock("expo-sharing") as { shareAsync: jest.Mock };
+// What each share received, read while the share sheet is "open".
+let sharedContent: (string | undefined)[] = [];
 const FOLDER = "file:///docs/Backups/ui-test-user";
 const todayFile = `${FOLDER}/jav-budget-${TODAY}.json`;
 
@@ -91,6 +99,10 @@ beforeEach(() => {
   fs.__files.clear();
   fs.__dirs.clear();
   sharing.shareAsync.mockClear();
+  sharedContent = [];
+  sharing.shareAsync.mockImplementation(async (uri: string) => {
+    sharedContent.push(fs.__files.get(uri));
+  });
 });
 
 test("another account cannot list, restore, or share the previous owner's backups", async () => {
@@ -116,9 +128,11 @@ test("Back up now writes today's restorable backup and Share opens it", async ()
   await user.press(screen.getByRole("button", { name: en("backup.now") }));
   expect(await screen.findByText(en("backup.done"))).toBeOnTheScreen();
 
+  // Encrypted at rest: no ledger text in the file, but it restores to the ledger.
   const written = fs.__files.get(todayFile);
-  expect(written).toBeDefined();
-  expect(JSON.parse(written!)).toEqual(await stored());
+  expect(written?.startsWith(SEALED_PREFIX)).toBe(true);
+  expect(written).not.toContain("Main checking");
+  expect(JSON.parse(await readBackup(listBackups()[0]))).toEqual(await stored());
   expect(
     screen.getByText(en("backup.last", { date: enI18n.mediumDate(TODAY), count: 1 })),
   ).toBeOnTheScreen();
@@ -128,7 +142,51 @@ test("Back up now writes today's restorable backup and Share opens it", async ()
       name: `${en("backup.share")}, ${enI18n.mediumDate(TODAY)}`,
     }),
   );
-  expect(sharing.shareAsync).toHaveBeenCalledWith(todayFile, expect.objectContaining({ mimeType: "application/json" }));
+  // Shares a plain JSON copy from the cache and removes it afterwards.
+  const shared = `file:///cache/jav-budget-${TODAY}.json`;
+  await waitFor(() =>
+    expect(sharing.shareAsync).toHaveBeenCalledWith(shared, expect.objectContaining({ mimeType: "application/json" })),
+  );
+  expect(sharedContent[0]).toEqual(JSON.stringify(await stored(), null, 2));
+  await waitFor(() => expect(fs.__files.has(shared)).toBe(false));
+  expect(fs.__files.get(todayFile)).toBe(written);
+});
+
+test("a sealed backup only opens for its owner and fails closed when tampered with", async () => {
+  const state = fixture();
+  const sealed = await sealBackup(JSON.stringify(state, null, 2), "other-user");
+  fs.__dirs.add(FOLDER);
+  fs.__files.set(`${FOLDER}/jav-budget-2026-01-15.json`, sealed);
+  const [entry] = listBackups();
+  await expect(readBackup(entry)).rejects.toThrow(en("backup.missing"));
+  fs.__files.set(entry.uri, await sealBackup(JSON.stringify(state, null, 2), "ui-test-user"));
+  expect(JSON.parse(await readBackup(entry))).toEqual(state);
+  // The key lives in the keychain (SecureStore), and tampering fails authentication.
+  const store = jest.requireMock("expo-secure-store") as { __items: Map<string, string> };
+  const key = [...store.__items.entries()].find(([name]) => name.startsWith("jav-budget.backup-key"));
+  expect(key).toBeDefined();
+  const tampered = sealed.slice(0, -4) + (sealed.endsWith("AAAA") ? "BBBB" : "AAAA");
+  fs.__files.set(entry.uri, tampered);
+  await expect(readBackup(entry)).rejects.toThrow(en("backup.missing"));
+});
+
+test("manual export removes its plain cache copy after sharing", async () => {
+  await exportBackup('{"version":2}');
+  const [[uri]] = sharing.shareAsync.mock.calls;
+  expect(uri).toMatch(/^file:\/\/\/cache\/jav-budget-.*\.json$/);
+  expect(sharedContent).toEqual(['{"version":2}']);
+  expect(fs.__files.has(uri)).toBe(false);
+});
+
+test("picked backups are size-checked before they are read", async () => {
+  const picker = jest.requireMock("expo-document-picker") as { getDocumentAsync: jest.Mock };
+  const uri = "file:///cache/picked.json";
+  fs.__files.set(uri, "x".repeat(10_000_001));
+  // The picker may not report a size: the file's own size is checked.
+  picker.getDocumentAsync.mockResolvedValue({ canceled: false, assets: [{ uri, name: "picked.json" }] });
+  await expect(pickBackup()).rejects.toThrow(en("device.backupTooLarge"));
+  fs.__files.set(uri, "{}");
+  await expect(pickBackup()).resolves.toBe("{}");
 });
 
 test("restoring a saved backup replaces the data after confirmation", async () => {

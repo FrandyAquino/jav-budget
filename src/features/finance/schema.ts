@@ -8,12 +8,17 @@ import {
   withPrimaryCategory,
 } from "./transactions.ts";
 import type { FinanceState } from "./types.ts";
+import { receiptName } from "../transactions/receipt-names.ts";
 
 export const SCHEMA_VERSION = 2;
 const currency = z.enum(["DOP", "USD"]);
 const amount = z.number().int().safe().nonnegative();
 const date = z.string().refine(validDate, "Invalid date");
 const month = z.string().refine(validPeriod, "Invalid month");
+export function validReceipt(value: string) {
+  if (/^blob:/i.test(value)) return true;
+  return /^file:\/\//i.test(value) && !!receiptName(value);
+}
 const split = z.object({ categoryId: z.string(), amount: amount.positive() });
 const transaction = z.object({
   id: z.string().min(1),
@@ -35,7 +40,15 @@ const transaction = z.object({
     .array(z.string())
     .default([])
     .transform((t) => normalizeTags(t)),
-  receipt: z.string().min(1).max(2048).optional(),
+  // Only what the app itself stores: a file in a receipts folder (re-anchored
+  // to this device's folder on display) or a web page-lifetime blob: URL.
+  // Anything else (http(s) and other remote URLs from a crafted backup or
+  // synced row) is dropped, never fetched; the rest of the record still loads.
+  receipt: z
+    .string()
+    .max(2048)
+    .transform((value) => (validReceipt(value) ? value : undefined))
+    .optional(),
   splits: z.array(split).optional(),
   importId: z.string().min(1).max(200).optional(),
 });

@@ -89,12 +89,25 @@ export async function exportBackup(content: string) {
   if (!(await sharing.isAvailableAsync()))
     throw new Error(t("device.sharingUnavailable"));
   const file = new File(Paths.cache, name);
-  await file.write(content);
-  await sharing.shareAsync(file.uri, {
-    mimeType: "application/json",
-    dialogTitle: t("device.exportTitle"),
-  });
+  // A plain JSON copy by design (the user is taking it out of the app); it
+  // must not linger in the cache once the share sheet closes.
+  try {
+    if (file.exists) file.delete();
+    await file.write(content);
+    await sharing.shareAsync(file.uri, {
+      mimeType: "application/json",
+      dialogTitle: t("device.exportTitle"),
+    });
+  } finally {
+    try {
+      if (file.exists) file.delete();
+    } catch {
+      // The OS clears the cache eventually.
+    }
+  }
 }
+
+const MAX_BACKUP_BYTES = 10_000_000;
 
 export async function pickBackup(): Promise<string | undefined> {
   const picker = await import("expo-document-picker");
@@ -105,11 +118,20 @@ export async function pickBackup(): Promise<string | undefined> {
   });
   if (result.canceled) return;
   const asset = result.assets[0];
-  if ((asset.size ?? 0) > 10_000_000)
+  // Reject by size before reading anything into memory; the picker's size can
+  // be missing, so fall back to the File's own size.
+  if ((asset.size ?? 0) > MAX_BACKUP_BYTES)
     throw new Error(t("device.backupTooLarge"));
-  if (Platform.OS === "web" && asset.file) return asset.file.text();
+  if (Platform.OS === "web" && asset.file) {
+    if (asset.file.size > MAX_BACKUP_BYTES)
+      throw new Error(t("device.backupTooLarge"));
+    return asset.file.text();
+  }
   const { File } = await import("expo-file-system");
-  return new File(asset.uri).text();
+  const file = new File(asset.uri);
+  if ((file.size ?? 0) > MAX_BACKUP_BYTES)
+    throw new Error(t("device.backupTooLarge"));
+  return file.text();
 }
 export async function changeAppIcon(icon: "graphite" | "chalk") {
   if (Platform.OS === "web")

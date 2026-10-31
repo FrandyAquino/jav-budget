@@ -12,10 +12,12 @@ import {
   selectRetained,
   serializeBackup,
 } from "./policy";
+import { openBackup, sealBackup } from "./crypto";
 import { reportBackup } from "./status";
 import { canAccessLedger, getSyncStatus } from "@/features/sync/status";
 
-// Native automatic backups in Documents/Backups (see policy.ts for the rules).
+// Native automatic backups in Documents/Backups (see policy.ts for the rules),
+// encrypted at rest (crypto.ts). Older plain JSON files still restore.
 export const autoBackupSupported = true;
 export type BackupEntry = { name: string; date: string; size: number; uri: string };
 
@@ -63,16 +65,20 @@ function serial<T>(work: () => Promise<T>): Promise<T> {
   return task;
 }
 
+// Encrypted files are base64 (~4/3 of the JSON) plus a short prefix.
+const MAX_FILE_BYTES = 14_000_000;
+
 async function write(date: string, content: string) {
-  // Validate exactly what lands on disk: it must restore through parseState.
+  // Validate exactly what gets sealed: it must restore through parseState.
   parseState(JSON.parse(content));
+  const sealed = await sealBackup(content, owner());
   const dir = folder();
   dir.create({ intermediates: true, idempotent: true });
   const name = backupFileName(date);
   // Write a hidden temp file first so a crash never leaves a truncated backup.
   const temp = new File(dir, `.${name}.tmp`);
   if (temp.exists) temp.delete();
-  await temp.write(content);
+  await temp.write(sealed);
   await temp.move(new File(dir, name), { overwrite: true });
 }
 
@@ -87,6 +93,15 @@ function prune() {
       } catch {
         // Retried after the next backup.
       }
+}
+
+// Whether a backup holds exactly `content` (an unreadable file never matches).
+async function sameContent(entry: BackupEntry, content: string, user: string) {
+  try {
+    return (await openBackup(await new File(entry.uri).text(), user)) === content;
+  } catch {
+    return false;
+  }
 }
 
 // Automatic backup: at most one file per day, only for real data
@@ -112,7 +127,7 @@ export function runAutoBackup(state: FinanceState): Promise<boolean> {
         return false;
       const content = serializeBackup(state);
       const newest = backups[0];
-      if (newest && (await new File(newest.uri).text()) === content) return false;
+      if (newest && (await sameContent(newest, content, user))) return false;
       if (!canAccessLedger() || owner() !== user) return false;
       await write(today, content);
       prune();
@@ -144,22 +159,42 @@ export function backupNow(state: FinanceState): Promise<void> {
   });
 }
 
+// The backup's JSON (decrypted; legacy plain files as they are).
 export async function readBackup(entry: BackupEntry): Promise<string> {
+  const user = owner();
   const file = new File(folder(), entry.name);
   if (file.uri !== entry.uri) throw new Error(t("backup.missing"));
   if (!parseBackupName(file.name) || !file.exists) throw new Error(t("backup.missing"));
-  if ((file.size ?? 0) > 10_000_000) throw new Error(t("device.backupTooLarge"));
-  return file.text();
+  if ((file.size ?? 0) > MAX_FILE_BYTES) throw new Error(t("device.backupTooLarge"));
+  const raw = await file.text();
+  try {
+    return await openBackup(raw, user);
+  } catch (error) {
+    console.warn("[backup] decrypting backup failed", error);
+    throw new Error(t("backup.missing"));
+  }
 }
 
+// Shares a plain JSON copy (an explicit export) from the cache, removed after
+// the share sheet closes; the encrypted original never leaves the app.
 export async function shareBackup(entry: BackupEntry) {
   const sharing = await import("expo-sharing");
   if (!(await sharing.isAvailableAsync())) throw new Error(t("device.sharingUnavailable"));
-  const file = new File(folder(), entry.name);
-  if (file.uri !== entry.uri || !parseBackupName(file.name)) throw new Error(t("backup.missing"));
-  await sharing.shareAsync(file.uri, {
-    mimeType: "application/json",
-    UTI: "public.json",
-    dialogTitle: t("device.exportTitle"),
-  });
+  const content = await readBackup(entry);
+  const copy = new File(Paths.cache, entry.name);
+  try {
+    if (copy.exists) copy.delete();
+    await copy.write(content);
+    await sharing.shareAsync(copy.uri, {
+      mimeType: "application/json",
+      UTI: "public.json",
+      dialogTitle: t("device.exportTitle"),
+    });
+  } finally {
+    try {
+      if (copy.exists) copy.delete();
+    } catch {
+      // Cache files are cleared by the OS eventually.
+    }
+  }
 }

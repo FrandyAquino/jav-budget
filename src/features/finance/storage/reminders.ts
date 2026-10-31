@@ -5,7 +5,8 @@ import { nextDate, type Account, type Recurring } from "../model.ts";
 export const REMINDER_CAP = 60;
 export const REMINDER_PREFIX = "jav:";
 export type ReminderInput = {
-  settings: { notifications: boolean };
+  // biometrics: the app lock is on (see `add` below).
+  settings: { notifications: boolean; biometrics?: boolean };
   recurring: Pick<
     Recurring,
     | "id"
@@ -44,11 +45,14 @@ export function planReminders(
   const end = new Date(now);
   end.setDate(end.getDate() + horizonDays);
   const planned: PlannedReminder[] = [];
+  // Notifications show on the lock screen: with the app lock on, never name
+  // the payee or card (the generic title alone still says a bill is due).
+  const locked = state.settings.biometrics === true;
   const add = (source: string, title: string, date: Date) =>
     planned.push({
       identifier: `${REMINDER_PREFIX}${source}:${ymd(date)}`,
       title: t("reminders.billDue"),
-      body: title,
+      body: locked ? "" : title,
       date,
     });
   for (const rule of state.recurring) {

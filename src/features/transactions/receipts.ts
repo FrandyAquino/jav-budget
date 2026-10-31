@@ -7,15 +7,15 @@ const folder = () => new Directory(Paths.document, RECEIPTS_FOLDER);
 
 // iOS can move the app container between updates, so absolute URIs go stale.
 // Re-anchor anything stored in our receipts folder to the current document path.
+// Everything else (a web blob: URL synced from the browser, or any remote URL)
+// resolves to "" so the image view never fetches it.
 export function resolveReceipt(uri: string) {
-  if (!uri.includes(`/${RECEIPTS_FOLDER}/`)) return uri;
   const name = receiptName(uri);
-  // Inside our folder but not a name we create: never resolve it.
   if (!name) return "";
   try {
     return new File(folder(), name).uri;
   } catch {
-    return uri;
+    return "";
   }
 }
 

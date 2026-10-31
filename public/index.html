@@ -4,6 +4,15 @@
     <meta charset="utf-8" />
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <!-- The export only loads same-origin scripts (no inline scripts). react-native-web
+         injects <style> tags and style attributes at runtime, hence 'unsafe-inline' for
+         styles only. Supabase (EXPO_PUBLIC_SUPABASE_URL) is the only remote origin: REST,
+         auth and Realtime (wss), plus signed receipt image URLs. frame-ancestors can't be
+         set from a meta tag; it needs a response header. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://ldhuiyinksudcfpxbuqh.supabase.co; font-src 'self' data:; connect-src 'self' https://ldhuiyinksudcfpxbuqh.supabase.co wss://ldhuiyinksudcfpxbuqh.supabase.co; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'"
+    />
     <title>%WEB_TITLE%</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />

@@ -82,3 +82,19 @@ test("planning is deterministic for idempotent rescheduling", () => {
   const state = input({ recurring: [rule("a"), rule("b", { nextDate: "2026-01-12", frequency: "weekly", anchorDay: 12 })] });
   assert.deepEqual(planReminders(state, now), planReminders(state, now));
 });
+
+test("with the app lock on, lock-screen reminders don't name the bill or card", () => {
+  const accounts = [{ id: "visa", name: "Visa Gold", type: "credit" as const, dueDay: 20 }];
+  const open = planReminders(input({ recurring: [rule("rent")], accounts }), now);
+  assert.ok(open.some((r) => r.body === "Bill rent"));
+  assert.ok(open.some((r) => r.body.includes("Visa Gold")));
+  const locked = planReminders(
+    input({ settings: { notifications: true, biometrics: true }, recurring: [rule("rent")], accounts }),
+    now,
+  );
+  assert.equal(locked.length, open.length);
+  for (const reminder of locked) {
+    assert.equal(reminder.body, "");
+    assert.equal(reminder.title, open[0].title);
+  }
+});

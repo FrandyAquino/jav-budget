@@ -138,6 +138,38 @@ test("receipt names are strict and orphans are found", () => {
   ]);
 });
 
+test("stored receipts are limited to app files and web blob: URLs", () => {
+  const kept = [
+    "file:///var/mobile/Containers/Data/Application/X/Documents/receipts/abc-1.jpg",
+    "file:///old/container/receipts/keep-1.png",
+    "blob:https://jav-budget.expo.app/6b0a3c1e-1d2f-4e5a-9b8c-7d6e5f4a3b2c",
+  ];
+  const dropped = [
+    "https://attacker.example/pixel.gif",
+    "http://attacker.example/receipts/a.jpg",
+    "https://attacker.example/receipts/abc-1.jpg",
+    "data:image/png;base64,AAAA",
+    "file:///etc/passwd",
+    "file:///doc/receipts/..",
+    "javascript:alert(1)",
+    "//attacker.example/receipts/a.jpg",
+    "",
+  ];
+  const state = {
+    ...fixture(),
+    transactions: [...kept, ...dropped].map((receipt, i) => tx({ id: `t${i}`, receipt })),
+  };
+  // A crafted backup or synced row still loads, minus the foreign receipt.
+  const loaded = parseState(JSON.parse(JSON.stringify(state)));
+  assert.deepEqual(
+    loaded.transactions.map((t) => t.receipt),
+    [...kept, ...dropped.map(() => undefined)],
+  );
+  // Records without a receipt are unchanged by the round trip.
+  const plain = parseState(JSON.parse(JSON.stringify({ ...fixture(), transactions: [tx()] })));
+  assert.equal("receipt" in plain.transactions[0], false);
+});
+
 test("unreadable data is copied to the recovery key without clobbering", async () => {
   const store = new Map<string, string>();
   const kv = {
