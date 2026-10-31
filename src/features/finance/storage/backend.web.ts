@@ -7,6 +7,7 @@ import {
   keepRecoveryCopy,
   notifyOutbox,
   optimisticUpdate,
+  outboxGained,
   patchSyncLocal,
   serialize,
   UnreadableDataError,
@@ -30,8 +31,12 @@ async function readSyncLocal(): Promise<SyncLocal> {
     return { outbox: {}, values: {} };
   }
 }
-const writeSyncLocal = (local: SyncLocal) =>
-  AsyncStorage.setItem(SYNC_KEY, JSON.stringify(local));
+// Unchanged bookkeeping isn't rewritten: every write wakes the other tabs.
+const writeSyncLocal = async (local: SyncLocal, previous?: SyncLocal) => {
+  const data = JSON.stringify(local);
+  if (previous && JSON.stringify(previous) === data) return;
+  await AsyncStorage.setItem(SYNC_KEY, data);
+};
 
 // Web: one JSON document in localStorage (via AsyncStorage), coordinated across tabs with Web Locks,
 // or an optimistic re-read-before-write check where Web Locks are unavailable.
@@ -120,7 +125,7 @@ export function syncTransact<R>(
           for (const listener of listeners) listener(output.state);
         }
       }
-      if (output.patch) await writeSyncLocal(patchSyncLocal(local, output.patch));
+      if (output.patch) await writeSyncLocal(patchSyncLocal(local, output.patch), local);
       return output.result;
     }),
   );
@@ -152,6 +157,10 @@ export function subscribe(listener: Listener, onError: () => void) {
     // session: another account may be replacing the ledger. Until the read
     // below, this tab still shows its own (same-owner) copy, and writes are
     // checked against the stored owner (requireLedgerOwner).
+    // Only new or re-stamped outbox entries (an edit in the other tab) need a
+    // sync here. Its cycles rewrite the bookkeeping (cursor, lastSyncedAt,
+    // acknowledgements) all the time; syncing back would bounce between tabs.
+    const gained = event.key === SYNC_KEY && outboxGained(event.oldValue, event.newValue);
     void syncTransact((base, local) => {
       const user = getSyncStatus().user?.id;
       const owned =
@@ -160,9 +169,7 @@ export function subscribe(listener: Listener, onError: () => void) {
         local.values.bootstrapped === user;
       if (!owned) setSyncStatus({ ledgerUserId: null });
       if (base && user && local.values.userId === user) listener(base);
-      // Only pending changes need a sync here; the other tab's own cycle
-      // already pushed its work, and syncing back would bounce between tabs.
-      return { result: Object.keys(local.outbox).length > 0 };
+      return { result: gained && Object.keys(local.outbox).length > 0 };
     })
       .then((pending) => {
         if (pending) notifyOutbox();

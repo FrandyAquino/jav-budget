@@ -3,7 +3,8 @@ import { act, screen, waitFor } from "expo-router/testing-library";
 import { en, fixture, renderApp, stored, TODAY } from "./helpers/app";
 import { client, meta, records, server, USER, VALID_CODE } from "./helpers/supabase-mock";
 import { setSyncStatus } from "@/features/sync/status";
-import { requestSync, signOut, whenIdle } from "@/features/sync/engine";
+import { backoffMs, eraseLocalCopy, requestSync, signOut, whenFirstPull, whenIdle } from "@/features/sync/engine";
+import { emptyState } from "@/features/finance/model";
 
 jest.mock("@/features/sync/config", () => ({
   SUPABASE_URL: "https://example.supabase.co",
@@ -164,7 +165,7 @@ test("signing in with an email code uploads this device's data", async () => {
   expect(records().map((r) => r.id)).toEqual(expect.arrayContaining(["t-beans", "t-dinner", "t-pay", "main"]));
   expect(records().every((r) => r.user_id === USER.id)).toBe(true);
   expect(meta().map((m) => m.key).sort()).toEqual(
-    ["settings_budgetPeriod", "settings_currency", "settings_email", "settings_exchangeRate", "settings_name", "settings_numberEntry"].sort(),
+    ["settings_budgetPeriod", "settings_currency", "settings_email", "settings_exchangeRate", "settings_name", "settings_numberEntry", "settings_primaryAccountId"].sort(),
   );
   expect(await screen.findByText(new RegExp(`^${en("account.status.idle")} · `))).toBeOnTheScreen();
   const local = JSON.parse((await AsyncStorage.getItem(SYNC_KEY)) ?? "{}");
@@ -274,4 +275,97 @@ test("Google sign-in uses the same account gate and first-sync ownership rules",
   expect(screen.queryByRole("tab", { name: en("tabs.home") })).not.toBeOnTheScreen();
   expect(records()).toEqual([]);
   expect((await stored()).transactions).toHaveLength(3);
+});
+
+const cloudCash = {
+  collection: "accounts",
+  id: "cloud-cash",
+  position: 0,
+  deleted: false,
+  client_updated_at: new Date(0).toISOString(),
+  data: { id: "cloud-cash", name: "Cloud cash", type: "cash", currency: "DOP", opening: 0, color: "#BA965C" },
+};
+
+test("erasing while signed in forgets the sync progress and downloads the cloud copy again", async () => {
+  server.signIn();
+  server.put("sync_records", cloudCash);
+  // This device already pulled past that row (cursor in the future).
+  await AsyncStorage.setItem(SYNC_KEY, JSON.stringify({
+    outbox: {},
+    values: {
+      userId: USER.id, bootstrapped: USER.id, metaCursor: "2099-01-01T00:00:00.000Z",
+      cursor: JSON.stringify({ at: "2099-01-01T00:00:00.000Z", collection: "", id: "" }),
+    },
+  }));
+  await renderApp("/settings", fixture());
+  await settled();
+  await whenFirstPull();
+  expect((await stored()).accounts.map((a) => a.id)).not.toContain("cloud-cash");
+
+  await act(async () => {
+    await eraseLocalCopy((base) => ({ ...emptyState(), settings: { ...emptyState().settings, language: base?.settings.language ?? "system" } }));
+  });
+  await settled();
+  const state = await stored();
+  expect(state.accounts.map((a) => a.id)).toEqual(["cloud-cash"]);
+  expect(state.transactions).toEqual([]);
+  expect(state.settings.onboarded).toBe(true);
+  const local = JSON.parse((await AsyncStorage.getItem(SYNC_KEY)) ?? "{}");
+  expect(local.values).toMatchObject({ userId: USER.id, bootstrapped: USER.id });
+  expect(JSON.parse(local.values.cursor).at).not.toBe("2099-01-01T00:00:00.000Z");
+  // Erasing sends nothing: the cloud copy stays as it was.
+  expect(records().map((r) => r.id)).toEqual(["cloud-cash"]);
+});
+
+test("focus/timer cycles right after a successful one only run with pending edits", async () => {
+  server.signIn();
+  await AsyncStorage.setItem(SYNC_KEY, JSON.stringify({
+    outbox: {}, values: { userId: USER.id, bootstrapped: USER.id },
+  }));
+  await renderApp("/settings", fixture());
+  await settled();
+  await act(() => requestSync());
+  const calls = client.auth.getSession.mock.calls.length;
+  await act(() => requestSync("timer"));
+  await act(() => requestSync("focus"));
+  expect(client.auth.getSession.mock.calls.length).toBe(calls);
+  // Edits pending: the cycle runs. Manual and outbox triggers always run.
+  const local = JSON.parse((await AsyncStorage.getItem(SYNC_KEY)) ?? "{}");
+  await AsyncStorage.setItem(SYNC_KEY, JSON.stringify({ ...local, outbox: { "r/transactions/t-beans": new Date().toISOString() } }));
+  await act(() => requestSync("timer"));
+  expect(client.auth.getSession.mock.calls.length).toBe(calls + 1);
+  expect(records().map((r) => r.id)).toContain("t-beans");
+  await act(() => requestSync("outbox"));
+  expect(client.auth.getSession.mock.calls.length).toBe(calls + 2);
+  // Requests made while a cycle runs are folded into one more cycle.
+  await act(() => Promise.all([requestSync(), requestSync(), requestSync()]));
+  expect(client.auth.getSession.mock.calls.length).toBe(calls + 4);
+});
+
+test("automatic retries back off after errors; manual ones don't", async () => {
+  expect([0, 1, 2, 3, 7, 20].map(backoffMs)).toEqual([0, 5_000, 10_000, 20_000, 300_000, 300_000]);
+  server.signIn();
+  await AsyncStorage.setItem(SYNC_KEY, JSON.stringify({
+    outbox: {}, values: { userId: USER.id, bootstrapped: USER.id },
+  }));
+  await renderApp("/settings", fixture());
+  await settled();
+  const original = client.from;
+  client.from = () => { throw new Error("Network offline"); };
+  try {
+    await act(() => requestSync());
+    const calls = client.auth.getSession.mock.calls.length;
+    await act(() => requestSync("outbox"));
+    await act(() => requestSync("timer"));
+    expect(client.auth.getSession.mock.calls.length).toBe(calls);
+    await act(() => requestSync());
+    expect(client.auth.getSession.mock.calls.length).toBe(calls + 1);
+  } finally {
+    client.from = original;
+  }
+  // Success resets the backoff.
+  await act(() => requestSync());
+  const calls = client.auth.getSession.mock.calls.length;
+  await act(() => requestSync("outbox"));
+  expect(client.auth.getSession.mock.calls.length).toBe(calls + 1);
 });

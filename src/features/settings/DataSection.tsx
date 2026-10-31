@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { router } from "expo-router";
 import { useFinance } from "@/features/finance/store";
-import { emptyState } from "@/features/finance/model";
+import { emptyState, type FinanceState } from "@/features/finance/model";
 import { parseState } from "@/features/finance/schema";
 import { sweepReceipts } from "@/features/transactions/receipts";
 import { exportBackup, pickBackup } from "@/features/finance/device";
@@ -23,6 +23,7 @@ import { BackupSettings } from "@/features/backup/BackupSettings";
 import { ExportReminder } from "@/features/backup/ExportReminder";
 import { serializeBackup } from "@/features/backup/policy";
 import { useSyncStatus } from "@/features/sync/status";
+import { eraseLocalCopy } from "@/features/sync/engine";
 
 type Dialog = "reset" | "import" | "restore";
 
@@ -61,7 +62,7 @@ export function DataSection({ onReplaced }: { onReplaced: () => void }) {
         }
       }
       const replacement = restored;
-      await update((s) => ({
+      const keepDevice = (s: FinanceState): FinanceState => ({
         ...replacement,
         settings: {
           ...replacement.settings,
@@ -74,7 +75,11 @@ export function DataSection({ onReplaced }: { onReplaced: () => void }) {
           autoBackup: s.settings.autoBackup,
           lastExportAt: s.settings.lastExportAt,
         },
-      }));
+      });
+      // Signed in, erasing also restarts the sync, so the cloud copy comes back.
+      if (dialog === "reset" && signedIn)
+        await eraseLocalCopy((base) => keepDevice(base ?? state));
+      else await update(keepDevice);
       // Photos of the replaced transactions are no longer referenced.
       sweepReceipts(replacement);
       setDialog(undefined);

@@ -140,10 +140,14 @@ export function recordChanges(outbox: Outbox, keys: string[], at: string) {
   return { ...outbox, ...set };
 }
 // Before a first sync: everything local that has no pending change yet gets
-// `at` (the epoch for a merge, so the cloud copy wins any conflict).
+// `at` (the epoch for a merge, so the cloud copy wins any conflict). On a
+// merge or pull, pending shared settings are forced to the epoch too: they are
+// this device's defaults, stamped when onboarding finished, and must not
+// overwrite the account's profile.
 export function seedOutbox(state: FinanceState, outbox: Outbox, at: string) {
   const set: Outbox = {};
-  for (const key of allKeys(state)) if (!outbox[key]) set[key] = at;
+  for (const key of allKeys(state))
+    if (!outbox[key] || (at === EPOCH && key.startsWith("m/"))) set[key] = at;
   return set;
 }
 export const EPOCH = new Date(0).toISOString();
@@ -173,6 +177,8 @@ export type PushBatch = {
   invalid: string[];
 };
 // Splits the outbox into batches of at most `size` rows.
+// Below the 64 KB jsonb limit of sync_records.data.
+export const MAX_ROW_CHARS = 60_000;
 export function buildPush(
   state: FinanceState,
   outbox: Outbox,
@@ -208,6 +214,11 @@ export function buildPush(
     } else {
       const i = positions(parsed.collection).get(parsed.id);
       const row = i === undefined ? undefined : state[parsed.collection][i];
+      // The server refuses oversized rows; one must not block every other change.
+      if (row && JSON.stringify(row).length > MAX_ROW_CHARS) {
+        batch.invalid.push(key);
+        continue;
+      }
       batch.records.push({
         collection: parsed.collection,
         id: parsed.id,
@@ -249,10 +260,21 @@ export function canonical(value: unknown): string {
       .join(",")}}`;
   return JSON.stringify(value) ?? "null";
 }
-const time = (iso: string | undefined) => {
-  const value = iso ? Date.parse(iso) : NaN;
+// Postgres timestamps ("2026-10-30 16:16:42.466225+00") as ms-precision ISO:
+// Safari's Date.parse rejects microseconds, a space separator and "+00".
+export function normalizeStamp(stamp: string): string {
+  const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2})?)(?:\.(\d+))?\s*(Z|[+-]\d{2}(?::?\d{2})?)?$/i.exec(stamp.trim());
+  if (!m) return stamp;
+  const seconds = m[2].length === 5 ? `${m[2]}:00` : m[2];
+  const ms = (m[3] ?? "").padEnd(3, "0").slice(0, 3);
+  const zone = !m[4] || /z/i.test(m[4]) ? "Z" : `${m[4].slice(0, 3)}:${m[4].slice(3).replace(":", "").padEnd(2, "0")}`;
+  return `${m[1]}T${seconds}.${ms}${zone}`;
+}
+export const stampTime = (iso: string | undefined) => {
+  const value = iso ? Date.parse(normalizeStamp(iso)) : NaN;
   return Number.isNaN(value) ? 0 : value;
 };
+const time = stampTime;
 // A pending local change newer than the cloud copy wins (it will be pushed);
 // otherwise the cloud copy wins (ties included).
 export const localWins = (outbox: Outbox, key: string, remoteAt: string) =>
@@ -264,11 +286,15 @@ type Op =
   | { kind: "meta"; field: SharedSetting; data: unknown; key: string; row: MetaRow };
 export type ApplyResult = {
   state: FinanceState;
+  // Outbox entries to add: tombstones for the losers of a same-key clash.
+  outbox: Outbox;
   // Outbox keys superseded by the cloud copy (to remove).
   superseded: string[];
   // Rows that could not be applied yet (e.g. a transaction whose account
   // hasn't arrived); kept and retried on the next pull.
   parked: RecordRow[];
+  // A setting was rejected (it isn't parked, so it must be fetched again).
+  metaRejected?: boolean;
   changed: boolean;
 };
 function opsFor(
@@ -366,6 +392,23 @@ const rank = (op: Op) =>
       ? SYNCED_COLLECTIONS.indexOf(op.collection)
       : 2 * SYNCED_COLLECTIONS.length - SYNCED_COLLECTIONS.indexOf(op.collection);
 
+// Budgets are unique per period (and category) and currency; two devices
+// creating "the same" budget get different ids.
+const uniqueKey = (collection: SyncedCollection, row: Record<string, unknown>) =>
+  collection === "budgets"
+    ? `${row.month}:${row.categoryId}:${row.currency}`
+    : collection === "monthlyBudgets"
+      ? `${row.month}:${row.currency}`
+      : undefined;
+function clashing(state: FinanceState, op: Op) {
+  if (op.kind !== "upsert") return;
+  const key = uniqueKey(op.collection, op.data);
+  if (key === undefined) return;
+  return (state[op.collection] as { id: string }[]).find(
+    (r) => r.id !== op.id && uniqueKey(op.collection, r) === key,
+  )?.id;
+}
+
 // Applies pulled rows to `state` through the normal validation (parseState).
 // When the whole set doesn't validate, rows are applied one by one in
 // dependency order and the ones that still don't fit are parked.
@@ -375,12 +418,14 @@ export function applyRemote(
   meta: MetaRow[],
   outbox: Outbox,
   validate: (state: FinanceState) => FinanceState = parseState,
+  now = new Date().toISOString(),
 ): ApplyResult {
   const superseded: string[] = [];
+  const added: Outbox = {};
   const ops = opsFor(state, records, meta, outbox, superseded);
-  if (!ops.length) return { state, superseded, parked: [], changed: false };
+  if (!ops.length) return { state, outbox: added, superseded, parked: [], changed: false };
   try {
-    return { state: validate(applyOps(state, ops)), superseded, parked: [], changed: true };
+    return { state: validate(applyOps(state, ops)), outbox: added, superseded, parked: [], changed: true };
   } catch {
     // Fall through to the incremental path.
   }
@@ -390,15 +435,36 @@ export function applyRemote(
   for (const op of [...ops].sort((a, b) => rank(a) - rank(b))) {
     try {
       current = validate(applyOps(current, [op]));
+      continue;
     } catch {
-      rejected.add(op.key);
-      if (op.kind !== "meta") parked.push(op.row);
+      // A same-key budget clash, or a row that doesn't fit (yet).
     }
+    const other = op.kind === "upsert" ? clashing(current, op) : undefined;
+    if (op.kind === "upsert" && other !== undefined) {
+      // Only the clash: every device keeps the same one (the older id; ids
+      // start with their creation time) and sends a tombstone for the other,
+      // so the cloud converges.
+      const loser: Op = { kind: "delete", collection: op.collection, id: other, key: recordKey(op.collection, other), row: op.row };
+      try {
+        const resolved = validate(applyOps(current, [loser, op]));
+        if (op.id < other) {
+          current = resolved;
+          added[loser.key] = now;
+        } else added[op.key] = now;
+        continue;
+      } catch {
+        // Something else is wrong too: park it.
+      }
+    }
+    rejected.add(op.key);
+    if (op.kind !== "meta") parked.push(op.row);
   }
   return {
     state: current,
+    outbox: added,
     superseded: superseded.filter((key) => !rejected.has(key)),
     parked,
+    metaRejected: [...rejected].some((key) => key.startsWith("m/")),
     changed: current !== state,
   };
 }
@@ -412,6 +478,17 @@ export function pullStart(cursor: Cursor | null): Cursor | null {
   const at = time(cursor.at) - PULL_OVERLAP_MS;
   return { at: new Date(Math.max(0, at)).toISOString(), collection: "", id: "" };
 }
+// Settings cursor: the newest server_updated_at seen in sync_meta.
+export function latestMeta(rows: MetaRow[], previous: string | null): string | null {
+  let latest = previous;
+  for (const row of rows)
+    if (row.server_updated_at && (!latest || time(row.server_updated_at) > time(latest)))
+      latest = row.server_updated_at;
+  return latest;
+}
+// Lower bound for the next settings fetch (same overlap as records).
+export const metaSince = (cursor: string) =>
+  new Date(Math.max(0, time(cursor) - PULL_OVERLAP_MS)).toISOString();
 const quote = (value: string) => `"${value.replace(/["\\]/g, (c) => `\\${c}`)}"`;
 // PostgREST `or` filter for rows strictly after `cursor` (keyset paging).
 export function afterCursor(cursor: Cursor): string {

@@ -95,6 +95,19 @@ export function patchSyncLocal(local: SyncLocal, patch: SyncPatch = {}): SyncLoc
     else values[key] = value;
   return { outbox, values };
 }
+// Whether a stored sync document (JSON SyncLocal) gained or re-stamped outbox
+// entries; acknowledgements and other bookkeeping (cursor, lastSyncedAt) don't count.
+export function outboxGained(before: string | null, after: string | null): boolean {
+  const outbox = (raw: string | null): Record<string, string> => {
+    try {
+      return (raw ? (JSON.parse(raw) as Partial<SyncLocal>).outbox : undefined) ?? {};
+    } catch {
+      return {};
+    }
+  };
+  const old = outbox(before);
+  return Object.entries(outbox(after)).some(([key, at]) => old[key] !== at);
+}
 // Notified after a local write added entries to the outbox.
 const outboxListeners = new Set<() => void>();
 export function onOutboxChange(listener: () => void) {

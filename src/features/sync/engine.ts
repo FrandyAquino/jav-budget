@@ -19,15 +19,18 @@ import {
   EPOCH,
   keepDeviceSettings,
   lastCursor,
+  latestMeta,
   localKind,
+  metaSince,
   planReceipts,
   pullStart,
   seedOutbox,
+  stampTime,
   type Cursor,
   type MetaRow,
   type RecordRow,
 } from "./core";
-import { RECEIPTS_BUCKET, SUPABASE_URL } from "./config";
+import { RECEIPTS_BUCKET, SUPABASE_URL, syncConfigured } from "./config";
 import { emailLinkToken } from "./email-link";
 import { beginGoogleSignIn, finishGoogleSignIn, hasGoogleCallback } from "./google-auth";
 import { createAuthVerifier } from "./auth-verifier";
@@ -50,6 +53,7 @@ type Values = {
   userId?: string; // account this device's data belongs to
   bootstrapped?: string; // user id whose first sync finished
   cursor?: string; // JSON Cursor
+  metaCursor?: string; // newest sync_meta server_updated_at seen
   parked?: string; // JSON RecordRow[]
   receipts?: string; // JSON string[] of names known to be in the cloud
   lastSyncedAt?: string;
@@ -82,8 +86,8 @@ function errorCode(error: unknown): SyncErrorCode {
 }
 const later = (a: Cursor | null, b: Cursor | null) => {
   if (!a || !b) return a ?? b;
-  const ta = Date.parse(a.at);
-  const tb = Date.parse(b.at);
+  const ta = stampTime(a.at);
+  const tb = stampTime(b.at);
   if (ta !== tb) return ta > tb ? a : b;
   return `${a.collection}/${a.id}` >= `${b.collection}/${b.id}` ? a : b;
 };
@@ -174,6 +178,7 @@ export async function signInWithGoogle(): Promise<boolean> {
 }
 
 function setUser(session: Session | null) {
+  if (!session) firstPullDone(); // nothing to pull while signed out
   const changed = getSyncStatus().user?.id !== session?.user.id;
   setSyncStatus({
     ready: true,
@@ -194,11 +199,14 @@ async function remoteHasData(client: SupabaseClient, user: string) {
   if (error) throw error;
   return (data ?? []).length > 0;
 }
-async function fetchMeta(client: SupabaseClient, user: string): Promise<MetaRow[]> {
-  const { data, error } = await client
+// Every setting, or only the ones changed after `since`.
+async function fetchMeta(client: SupabaseClient, user: string, since?: string | null): Promise<MetaRow[]> {
+  let query = client
     .from("sync_meta")
     .select("key,data,client_updated_at,server_updated_at")
     .eq("user_id", user);
+  if (since) query = query.or(`server_updated_at.gt."${since}"`);
+  const { data, error } = await query;
   if (error) throw error;
   return (data ?? []) as MetaRow[];
 }
@@ -248,7 +256,10 @@ async function push(client: SupabaseClient, user: string) {
   }
 }
 async function pull(client: SupabaseClient, user: string, from: Cursor | null) {
-  const meta = await fetchMeta(client, user);
+  // Settings: all of them on a first pull, then only the recently changed.
+  const { local: start } = await read();
+  const since = from ? values(start).metaCursor : undefined;
+  const meta = await fetchMeta(client, user, since && metaSince(since));
   let after = from;
   let first = true;
   for (;;) {
@@ -262,13 +273,18 @@ async function pull(client: SupabaseClient, user: string, from: Cursor | null) {
       const result = applyRemote(base, [...parked, ...rows], pageMeta, local.outbox);
       const cursor = later(json<Cursor | null>(values(local).cursor, null), lastCursor(rows, null));
       const next = onboardedIfData(result.state);
+      const metaCursor = result.metaRejected
+        ? values(local).metaCursor
+        : latestMeta(pageMeta, values(local).metaCursor ?? null);
       return {
         state: result.changed || next !== result.state ? next : undefined,
         patch: {
           removeOutbox: result.superseded,
+          outbox: result.outbox,
           values: {
             cursor: cursor ? JSON.stringify(cursor) : null,
             parked: result.parked.length ? JSON.stringify(result.parked.slice(-500)) : null,
+            ...(metaCursor ? { metaCursor } : {}),
           },
         },
         result: false,
@@ -342,10 +358,12 @@ async function bootstrap(client: SupabaseClient, user: string, mode: Bootstrap) 
         patch: {
           clearOutbox: true,
           clearValues: true,
+          outbox: result.outbox,
           values: {
             userId: user,
             bootstrapped: user,
             cursor: cursor ? JSON.stringify(cursor) : null,
+            metaCursor: latestMeta(meta, null),
             parked: result.parked.length ? JSON.stringify(result.parked) : null,
             lastSyncedAt: now,
           },
@@ -415,7 +433,23 @@ async function cycle(client: SupabaseClient, session: Session) {
 }
 
 let running: Promise<void> | null = null;
-let again = false;
+// What asked for sync: manual (Sync now, sign-in, launch) bypasses the
+// backoff; outbox (local edits) never skips for the minimum gap.
+export type SyncTrigger = "manual" | "outbox" | "focus" | "timer";
+const strength: Record<SyncTrigger, number> = { timer: 0, focus: 0, outbox: 1, manual: 2 };
+let pending: SyncTrigger | null = null;
+// Focus/timer cycles shortly after a successful one only run with pending edits.
+export const MIN_GAP_MS = 15_000;
+let lastSuccess = 0;
+// Automatic triggers wait after errors: 5 s doubling up to 5 min.
+let failures = 0;
+let retryAt = 0;
+let retryTimer: ReturnType<typeof setTimeout> | undefined;
+export const backoffMs = (failures: number) =>
+  failures ? Math.min(5_000 * 2 ** (failures - 1), 300_000) : 0;
+// Resolves once this session's first cycle ended (whatever the outcome).
+let firstPullDone: () => void = () => {};
+const firstPull = new Promise<void>((resolve) => (firstPullDone = resolve));
 // Everything in flight (cycles, first-sync answers, sign-out), for whenIdle().
 let activity: Promise<unknown> = Promise.resolve();
 function track<T>(work: Promise<T>): Promise<T> {
@@ -426,36 +460,80 @@ function track<T>(work: Promise<T>): Promise<T> {
 export async function whenIdle() {
   for (let last; last !== activity; ) await (last = activity);
 }
+// Resolves once this session's first sync cycle finished (or there is none:
+// sync not configured, signed out). Capped so a stalled network never blocks.
+export function whenFirstPull(timeoutMs = 30_000): Promise<void> {
+  if (!syncConfigured || !getSupabase()) return Promise.resolve();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    firstPull,
+    new Promise<void>((resolve) => (timer = setTimeout(resolve, timeoutMs))),
+  ]).finally(() => clearTimeout(timer));
+}
 // Runs a sync cycle now (or right after the one in progress). Never throws.
-export function requestSync(): Promise<void> {
+export function requestSync(trigger: SyncTrigger = "manual"): Promise<void> {
   if (getSyncStatus().transitioning) return Promise.resolve();
+  if (trigger !== "manual" && Date.now() < retryAt) {
+    // Local edits still go out once the backoff ends.
+    if (trigger === "outbox" && !retryTimer)
+      retryTimer = setTimeout(() => {
+        retryTimer = undefined;
+        void requestSync("outbox");
+      }, retryAt - Date.now());
+    return Promise.resolve();
+  }
   if (running) {
-    again = true;
+    if (!pending || strength[trigger] > strength[pending]) pending = trigger;
     return running;
   }
-  running = track((async () => {
-    do {
-      again = false;
-      const client = getSupabase();
-      if (!client) return;
-      try {
-        const session = await currentSession(client);
-        setUser(session);
-        if (!session) return;
-        // A pending first-sync question is asked again (or dropped when no
-        // longer needed, e.g. the sample data was removed meanwhile).
-        setSyncStatus({ phase: "syncing" });
-        await cycle(client, session);
-      } catch (error) {
-        if (error instanceof LedgerOwnerChangedError || errorCode(error) === "auth")
-          setSyncStatus({ ledgerUserId: null });
-        setSyncStatus({ phase: "error", error: errorCode(error) });
+  const work = (async () => {
+    await null; // `running` is set before the loop starts
+    try {
+      for (let next: SyncTrigger | null = trigger; next; ) {
+        await runCycle(next);
+        next = getSyncStatus().transitioning ? null : pending;
+        pending = null;
       }
-    } while (again && !getSyncStatus().transitioning);
-  })()).finally(() => {
-    running = null;
-  });
+    } finally {
+      // Same tick as the last `pending` check: no request is lost.
+      running = null;
+      pending = null;
+    }
+  })();
+  running = track(work);
   return running;
+}
+async function runCycle(trigger: SyncTrigger) {
+  try {
+    if ((trigger === "focus" || trigger === "timer") && Date.now() - lastSuccess < MIN_GAP_MS) {
+      const { local } = await read().catch(() => ({ local: null }));
+      if (local && !Object.keys(local.outbox).length) return;
+    }
+    const client = getSupabase();
+    if (!client) return;
+    try {
+      const session = await currentSession(client);
+      setUser(session);
+      if (!session) return;
+      // A pending first-sync question is asked again (or dropped when no
+      // longer needed, e.g. the sample data was removed meanwhile).
+      setSyncStatus({ phase: "syncing" });
+      await cycle(client, session);
+    } catch (error) {
+      if (error instanceof LedgerOwnerChangedError || errorCode(error) === "auth")
+        setSyncStatus({ ledgerUserId: null });
+      setSyncStatus({ phase: "error", error: errorCode(error) });
+    }
+    const { phase } = getSyncStatus();
+    if (phase === "error") retryAt = Date.now() + backoffMs(++failures);
+    else if (phase === "idle") {
+      failures = 0;
+      retryAt = 0;
+      lastSuccess = Date.now();
+    }
+  } finally {
+    firstPullDone();
+  }
 }
 
 export type DecisionChoice = "merge" | "replace" | "cancel";
@@ -528,6 +606,27 @@ async function eraseDevice() {
   });
   await patch({ clearOutbox: true, clearValues: true });
   sweepReceipts({ transactions: [] });
+}
+
+// Settings -> erase while signed in: replaces this device's copy with `next`
+// and forgets the sync progress (keeps the account link), in one write, so the
+// next cycle downloads the whole cloud copy again instead of resuming.
+export async function eraseLocalCopy(next: (base: FinanceState | null) => FinanceState) {
+  const user = getSyncStatus().user?.id;
+  const state = await syncTransact((base, local) => {
+    if (user) requireLedgerOwner(local, user);
+    const state = parseState(next(base));
+    return {
+      state,
+      patch: {
+        clearOutbox: true,
+        values: { bootstrapped: null, cursor: null, metaCursor: null, parked: null },
+      },
+      result: state,
+    };
+  });
+  void requestSync();
+  return state;
 }
 
 // Permanently deletes the cloud account: receipt photos first (only the

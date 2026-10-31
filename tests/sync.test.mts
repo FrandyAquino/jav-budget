@@ -12,8 +12,11 @@ import {
   EPOCH,
   keepDeviceSettings,
   lastCursor,
+  latestMeta,
   localKind,
   mergeParked,
+  metaSince,
+  normalizeStamp,
   parseKey,
   planReceipts,
   pullStart,
@@ -22,10 +25,12 @@ import {
   recordKey,
   seedOutbox,
   settingKey,
+  stampTime,
   syncChanges,
   type RecordRow,
 } from "../src/features/sync/core.ts";
 import { emptyState } from "../src/features/finance/defaults.ts";
+import { outboxGained } from "../src/features/finance/storage/shared.ts";
 import { parseState } from "../src/features/finance/schema.ts";
 import type { FinanceState, Transaction } from "../src/features/finance/types.ts";
 
@@ -99,6 +104,16 @@ test("outbox keys parse back and unknown ones are rejected", () => {
   assert.equal(seeded[recordKey("transactions", "t1")], undefined);
   assert.equal(seeded[recordKey("transactions", "t2")], EPOCH);
   assert.equal(seeded[settingKey("name")], EPOCH);
+  // Merge/pull: settings stamped by onboarding on this device lose to the cloud.
+  const fresh = { [settingKey("name")]: "2026-10-30T10:00:00.000Z", [recordKey("transactions", "t1")]: "2026-10-30T10:00:00.000Z" };
+  const merged = seedOutbox(state, fresh, EPOCH);
+  assert.equal(merged[settingKey("name")], EPOCH);
+  assert.equal(merged[settingKey("primaryAccountId")], EPOCH);
+  assert.equal(merged[recordKey("transactions", "t1")], undefined);
+  // Uploading into an empty cloud keeps them.
+  assert.equal(seedOutbox(state, fresh, "2026-10-31T00:00:00.000Z")[settingKey("name")], undefined);
+  const synced = applyRemote(state, [], [{ key: "settings_name", data: "Cloud Ana", client_updated_at: "2026-10-01T00:00:00.000Z" }], { ...fresh, ...merged });
+  assert.equal(synced.state.settings.name, "Cloud Ana");
 });
 
 test("push batches carry current data, tombstones and shared settings", () => {
@@ -278,4 +293,89 @@ test("receipt plan: upload local photos, download missing ones, remove unreferen
   assert.deepEqual(plan.upload, ["a1.jpg"]);
   assert.deepEqual(plan.download, ["b2.png"]);
   assert.deepEqual(plan.remove, ["old.jpg"]);
+});
+
+test("Postgres timestamps parse the same everywhere (Safari-safe)", () => {
+  const expected = Date.UTC(2026, 9, 30, 16, 16, 42, 466);
+  for (const stamp of [
+    "2026-10-30 16:16:42.466225+00",
+    "2026-10-30T16:16:42.466225+00:00",
+    "2026-10-30T16:16:42.466Z",
+    "2026-10-30 18:16:42.466225+0200",
+  ])
+    assert.equal(stampTime(stamp), expected, stamp);
+  assert.equal(normalizeStamp("2026-10-30 16:16:42+00"), "2026-10-30T16:16:42.000+00:00");
+  assert.equal(stampTime("2026-10-30T16:16:42+05:30"), Date.UTC(2026, 9, 30, 10, 46, 42));
+  assert.equal(stampTime("nonsense"), 0);
+  assert.equal(stampTime(undefined), 0);
+  // pullStart understands them too.
+  assert.equal(pullStart({ at: "2026-10-30 16:16:42.466225+00", collection: "a", id: "b" })?.at, new Date(expected - PULL_OVERLAP_MS).toISOString());
+});
+
+test("settings cursor keeps the newest stamp and re-reads an overlap window", () => {
+  const meta = (at: string) => ({ key: "settings_name", data: "x", client_updated_at: EPOCH, server_updated_at: at });
+  assert.equal(latestMeta([], null), null);
+  assert.equal(latestMeta([meta("2026-10-30 16:00:00.5+00"), meta("2026-10-30 15:00:00+00")], null), "2026-10-30 16:00:00.5+00");
+  assert.equal(latestMeta([meta("2026-10-30 15:00:00+00")], "2026-10-30T16:00:00.000Z"), "2026-10-30T16:00:00.000Z");
+  assert.equal(metaSince("2026-10-30 16:01:00.123456+00"), "2026-10-30T16:00:00.123Z");
+});
+
+test("two devices creating the same budget converge on one (older id) and tombstone the other", () => {
+  const now = "2026-10-31T00:00:00.000Z";
+  const base = ledger();
+  const budget = (id: string, limit: number) => ({ id, categoryId: "groceries", currency: "DOP" as const, month: "2026-10", limit, rollover: false });
+  const monthly = (id: string, limit: number) => ({ id, currency: "DOP" as const, month: "2026-10", limit });
+  // Device A has "b", pulls the older "a": the remote one wins.
+  const a = parseState({ ...base, budgets: [budget("b", 100)], monthlyBudgets: [monthly("mb", 1)] });
+  const onA = applyRemote(a, [
+    row({ collection: "budgets", id: "a", data: budget("a", 200) }),
+    row({ collection: "monthlyBudgets", id: "ma", data: monthly("ma", 2) }),
+  ], [], {}, parseState, now);
+  assert.deepEqual(onA.state.budgets.map((x) => [x.id, x.limit]), [["a", 200]]);
+  assert.deepEqual(onA.state.monthlyBudgets.map((x) => x.id), ["ma"]);
+  assert.deepEqual(onA.outbox, { [recordKey("budgets", "b")]: now, [recordKey("monthlyBudgets", "mb")]: now });
+  assert.deepEqual(onA.parked, []);
+  // Device B has the older "a", pulls "b": keeps its own and tombstones "b".
+  const b = parseState({ ...base, budgets: [budget("a", 200)] });
+  const onB = applyRemote(b, [row({ collection: "budgets", id: "b", data: budget("b", 100) })], [], {}, parseState, now);
+  assert.equal(onB.state, b);
+  assert.deepEqual(onB.outbox, { [recordKey("budgets", "b")]: now });
+  assert.deepEqual(onB.parked, []);
+  // The tombstone pushed by either device then applies cleanly.
+  const gone = applyRemote(onB.state, [row({ collection: "budgets", id: "b", deleted: true })], [], {});
+  assert.equal(gone.changed, false);
+  // A clash that also has another problem (category missing) is still parked.
+  const broken = applyRemote(a, [row({ collection: "budgets", id: "c", data: { ...budget("c", 1), categoryId: "nope" } })], [], {}, parseState, now);
+  assert.deepEqual(broken.parked.map((r) => r.id), ["c"]);
+  assert.deepEqual(broken.outbox, {});
+});
+
+test("other tabs only sync when the outbox gained or re-stamped entries", () => {
+  const doc = (outbox: Record<string, string>, values: Record<string, string> = {}) => JSON.stringify({ outbox, values });
+  // A cycle in the other tab: cursor/lastSyncedAt and acknowledgements only.
+  assert.equal(outboxGained(doc({ a: "1" }), doc({ a: "1" }, { lastSyncedAt: "x" })), false);
+  assert.equal(outboxGained(doc({ a: "1", b: "1" }), doc({ a: "1" })), false);
+  assert.equal(outboxGained(null, null), false);
+  // An edit there.
+  assert.equal(outboxGained(doc({ a: "1" }), doc({ a: "1", b: "2" })), true);
+  assert.equal(outboxGained(doc({ a: "1" }), doc({ a: "2" })), true);
+  assert.equal(outboxGained(null, doc({ a: "1" })), true);
+  assert.equal(outboxGained("{bad", doc({})), false);
+});
+
+test("an oversized record is dropped from the push instead of blocking it", () => {
+  const state = ledger();
+  const huge = { ...state, transactions: state.transactions.map((t, i) => (i ? t : { ...t, note: "x".repeat(70_000) })) };
+  const id = huge.transactions[0].id;
+  const [batch] = buildPush(huge, { [recordKey("transactions", id)]: "2026-10-25T10:00:00.000Z" });
+  assert.deepEqual(batch.records, []);
+  assert.deepEqual(batch.invalid, [recordKey("transactions", id)]);
+});
+
+test("a rejected setting is reported so the pull doesn't skip past it", () => {
+  const state = ledger();
+  const bad = applyRemote(state, [], [{ key: "settings_budgetPeriod", data: "fortnightly-ish", client_updated_at: "2026-10-01T00:00:00.000Z" }], {});
+  assert.equal(bad.metaRejected, true);
+  const good = applyRemote(state, [], [{ key: "settings_name", data: "Cloud", client_updated_at: "2026-10-01T00:00:00.000Z" }], {});
+  assert.notEqual(good.metaRejected, true);
 });
