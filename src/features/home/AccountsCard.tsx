@@ -1,7 +1,7 @@
 import { Pressable, View } from "react-native";
 import { router } from "expo-router";
 import {
-  accountBalance,
+  balancesByAccount,
   type Account,
   type Currency,
   type FinanceState,
@@ -30,6 +30,7 @@ export function AccountsCard({
   const { colors } = useTheme();
   const { t } = useT();
   const accounts = state.accounts.filter((a) => a.currency === currency);
+  const balances = balancesByAccount(state);
   return (
     <Card>
       <Section
@@ -44,7 +45,7 @@ export function AccountsCard({
             <AccountRow
               key={a.id}
               account={a}
-              balance={accountBalance(state, a.id)}
+              balance={balances.get(a.id) ?? 0}
               colors={colors}
             />
           ))

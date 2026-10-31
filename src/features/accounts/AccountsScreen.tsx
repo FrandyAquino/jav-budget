@@ -3,8 +3,8 @@ import { Pressable, View } from "react-native";
 import { router } from "expo-router";
 import { useFinance } from "@/features/finance/store";
 import {
-  accountBalance,
   amountText,
+  balancesByAccount,
   entryAmount,
   id,
   removeAccount,
@@ -39,6 +39,7 @@ export default function AccountsScreen() {
   const { t, money } = useT();
   const [editing, setEditing] = useState<Account | "new">();
   const [transfer, setTransfer] = useState(false);
+  const balances = balancesByAccount(state);
   return (
     <Screen
       title={t("accounts.title")}
@@ -82,7 +83,7 @@ export default function AccountsScreen() {
               </Txt>
               <Amount
                 value={accounts.reduce(
-                  (sum, a) => sum + accountBalance(state, a.id),
+                  (sum, a) => sum + (balances.get(a.id) ?? 0),
                   0,
                 )}
                 currency={currency}
@@ -91,7 +92,7 @@ export default function AccountsScreen() {
             </Row>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 18 }}>
               {accounts.map((a) => {
-                const balance = accountBalance(state, a.id);
+                const balance = balances.get(a.id) ?? 0;
                 const debt = Math.max(0, -balance);
                 return (
                   <Pressable

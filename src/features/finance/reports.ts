@@ -1,7 +1,7 @@
 import { dateString, daysInRange, periodRange, today } from "./dates.ts";
 import { convert } from "./money.ts";
 import { nextDate, recurringTemplate } from "./recurrence.ts";
-import { accountBalance, allocations, hasCategory } from "./transactions.ts";
+import { allocations, balancesByAccount, hasCategory } from "./transactions.ts";
 import type {
   Currency,
   DateRange,
@@ -21,12 +21,10 @@ export function rangeTransactions(
   currency: Currency,
 ) {
   const ids = currencyAccounts(state, currency);
+  const now = today();
+  const end = range.to < now ? range.to : now;
   return state.transactions.filter(
-    (t) =>
-      ids.has(t.accountId) &&
-      t.date >= range.from &&
-      t.date <= range.to &&
-      t.date <= today(),
+    (t) => ids.has(t.accountId) && t.date >= range.from && t.date <= end,
   );
 }
 function cashFlow(state: FinanceState, tx: Transaction[], currency: Currency) {
@@ -41,9 +39,10 @@ function cashFlow(state: FinanceState, tx: Transaction[], currency: Currency) {
   };
 }
 export function currencyBalance(state: FinanceState, currency: Currency) {
+  const balances = balancesByAccount(state);
   return state.accounts
     .filter((a) => a.currency === currency)
-    .reduce((v, a) => v + accountBalance(state, a.id), 0);
+    .reduce((v, a) => v + (balances.get(a.id) ?? 0), 0);
 }
 export function rangeTotals(
   state: FinanceState,
@@ -58,9 +57,9 @@ export function monthTransactions(
   currency: Currency,
 ) {
   const ids = currencyAccounts(state, currency);
+  const now = today();
   return state.transactions.filter(
-    (t) =>
-      t.date.startsWith(month) && t.date <= today() && ids.has(t.accountId),
+    (t) => t.date.startsWith(month) && t.date <= now && ids.has(t.accountId),
   );
 }
 export function periodTransactions(
@@ -70,7 +69,8 @@ export function periodTransactions(
 ) {
   const ids = currencyAccounts(state, currency);
   const { from, to } = periodRange(period);
-  const end = to < today() ? to : today();
+  const now = today();
+  const end = to < now ? to : now;
   return state.transactions.filter(
     (t) => t.date >= from && t.date <= end && ids.has(t.accountId),
   );
@@ -109,8 +109,9 @@ export function balanceSeries(
   const ids = new Set(accounts.map((a) => a.id));
   let balance = accounts.reduce((sum, a) => sum + a.opening, 0);
   const changes = new Map<string, number>();
+  const now = today();
   for (const t of state.transactions) {
-    if (t.date > range.to || t.date > today()) continue;
+    if (t.date > range.to || t.date > now) continue;
     const delta =
       (ids.has(t.accountId)
         ? t.kind === "income"
@@ -178,6 +179,7 @@ export function reportEntries(
   category = "",
 ): Transaction[] {
   if (mode === "upcoming") {
+    const now = today();
     const result: Transaction[] = [];
     for (const r of state.recurring) {
       if (
@@ -191,7 +193,7 @@ export function reportEntries(
       for (let i = 0; i < 600 && date <= range.to; i++) {
         if (
           date >= range.from &&
-          date > today() &&
+          date > now &&
           (!category || hasCategory(r, category))
         )
           result.push(recurringTemplate(r, date, `forecast:${r.id}:${date}`));

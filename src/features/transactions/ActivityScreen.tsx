@@ -1,14 +1,14 @@
 import { SelectField } from "@/shared/SelectField";
 import { entryViews } from "@/shared/EntryReport";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useDeferredValue, useState } from "react";
 import { View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFinance } from "@/features/finance/store";
+import { useFinanceState } from "@/features/finance/store";
+import { useToday } from "@/features/finance/useToday";
 import {
   dateString,
   reportEntries,
-  today,
   type Transaction,
 } from "@/features/finance/model";
 import {
@@ -35,24 +35,28 @@ import { TransactionForm } from "./TransactionForm";
 import { useT } from "@/shared/i18n/react";
 
 export default function ActivityScreen() {
-  const { state } = useFinance();
+  const { state } = useFinanceState();
   const { colors } = useTheme();
   const { t, lang, locale, money } = useT();
   const [search, setSearch] = useState("");
+  // Typing stays responsive; the list filters at lower priority.
+  const query = useDeferredValue(search);
   const [kind, setKind] = useState("all");
   const currency = state.settings.currency;
   const [groupBy, setGroupBy] = useState<GroupBy>("all");
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [filterOpen, setFilterOpen] = useState(false);
   const [editing, setEditing] = useState<Transaction | "new">();
-  const forecastEnd = new Date(`${today()}T12:00:00`);
+  // Reactive (not today()): a memoized value would go stale after midnight.
+  const now = useToday();
+  const forecastEnd = new Date(`${now}T12:00:00`);
   forecastEnd.setDate(forecastEnd.getDate() + 30);
   const source =
     groupBy === "upcoming"
       ? reportEntries(
           state,
           currency,
-          { from: today(), to: dateString(forecastEnd) },
+          { from: now, to: dateString(forecastEnd) },
           "upcoming",
         )
       : state.transactions;
@@ -60,7 +64,7 @@ export default function ActivityScreen() {
     kind,
     currency,
     groupBy,
-    search,
+    search: query,
     filters,
   });
   const filtered = filtersApplied(filters);

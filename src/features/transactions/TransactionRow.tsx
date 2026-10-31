@@ -1,6 +1,6 @@
 import { Pressable, View } from "react-native";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
-import { useFinance } from "@/features/finance/store";
+import { useLookups } from "@/features/finance/store";
 import type { Transaction } from "@/features/finance/model";
 import { useT } from "@/shared/i18n/react";
 import { Icon, Row, Txt, useTheme } from "@/shared/ui";
@@ -16,13 +16,12 @@ export function TransactionRow({
   onPress: () => void;
   swipe?: boolean;
 }) {
-  const { state } = useFinance();
+  // Lookups (not the whole ledger): a write elsewhere doesn't re-render rows.
+  const { categories, accounts } = useLookups();
   const { colors } = useTheme();
   const { t, money, shortDate } = useT();
-  const category = state.categories.find(
-    (c) => c.id === transaction.categoryId,
-  );
-  const account = state.accounts.find((a) => a.id === transaction.accountId);
+  const category = categories.get(transaction.categoryId);
+  const account = accounts.get(transaction.accountId);
   const transfer = transaction.kind === "transfer";
   const income = transaction.kind === "income";
   const parts = transaction.splits?.length ?? 0;

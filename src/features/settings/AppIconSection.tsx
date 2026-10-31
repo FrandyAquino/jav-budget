@@ -1,4 +1,5 @@
-import { Image, Platform, Pressable } from "react-native";
+import { Image } from "expo-image";
+import { Platform, Pressable } from "react-native";
 import { useFinance } from "@/features/finance/store";
 import { changeAppIcon } from "@/features/finance/device";
 import {
@@ -59,8 +60,11 @@ export function AppIconSection() {
               borderColor: selected === icon ? colors.text : colors.line,
             }}
           >
+            {/* expo-image downsamples the large PNGs to the 64pt view. */}
             <Image
               source={icons[icon].source}
+              contentFit="cover"
+              recyclingKey={icon}
               style={{ width: 64, height: 64, borderRadius: 15 }}
             />
             <Txt size={12}>{t(icons[icon].label)}</Txt>

@@ -1,5 +1,5 @@
 import { Pressable, View } from "react-native";
-import { useFinance } from "@/features/finance/store";
+import { useFinanceState, useLookups } from "@/features/finance/store";
 import {
   budgetStatus,
   previousBudget,
@@ -17,11 +17,11 @@ export function BudgetRow({
   budget: Budget;
   onPress: () => void;
 }) {
-  const { state } = useFinance();
+  const { state } = useFinanceState();
   const { colors } = useTheme();
   const i18n = useT();
   const { t, money, monthName } = i18n;
-  const category = state.categories.find((c) => c.id === budget.categoryId);
+  const category = useLookups().categories.get(budget.categoryId);
   const status = budgetStatus(state, budget);
   const { currency } = budget;
   const color = statusColor(status, colors);

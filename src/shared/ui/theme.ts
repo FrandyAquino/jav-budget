@@ -1,5 +1,5 @@
 import { useColorScheme } from "react-native";
-import { useFinance } from "@/features/finance/store";
+import { useAppearance } from "@/features/finance/store";
 
 const light = {
   bg: "#F4F4F5",
@@ -29,10 +29,10 @@ const dark: typeof light = {
 };
 export type ThemeColors = typeof light;
 export function useTheme() {
-  const { state } = useFinance();
+  // Only the appearance setting: ledger writes and toasts don't re-render.
+  const appearance = useAppearance();
   const system = useColorScheme();
   const isDark =
-    state.settings.appearance === "dark" ||
-    (state.settings.appearance === "system" && system === "dark");
+    appearance === "dark" || (appearance === "system" && system === "dark");
   return { colors: isDark ? dark : light, isDark };
 }

@@ -190,6 +190,24 @@ export function accountBalance(
       state.accounts.find((a) => a.id === accountId)?.opening ?? 0,
     );
 }
+// Every account's balance in one pass over the transactions; same result as
+// calling accountBalance for each account.
+export function balancesByAccount(state: FinanceState, through = today()) {
+  const balances = new Map<string, number>();
+  for (const a of state.accounts)
+    if (!balances.has(a.id)) balances.set(a.id, a.opening);
+  for (const t of state.transactions) {
+    if (t.date > through) continue;
+    const from = balances.get(t.accountId);
+    if (from !== undefined)
+      balances.set(t.accountId, from + (t.kind === "income" ? t.amount : -t.amount));
+    if (t.kind !== "transfer" || !t.toAccountId) continue;
+    const to = balances.get(t.toAccountId);
+    if (to !== undefined)
+      balances.set(t.toAccountId, to + (t.received ?? t.amount));
+  }
+  return balances;
+}
 export function removeAccount(
   state: FinanceState,
   accountId: string,

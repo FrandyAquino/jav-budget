@@ -7,6 +7,7 @@ import {
   weekStart,
   accountBalance,
   balanceSeries,
+  balancesByAccount,
   cents,
   defaultCategories,
   emptyState,
@@ -179,6 +180,27 @@ test("expense and income affect balances in opposite directions", () => {
     tx({ id: "salary", kind: "income", categoryId: "salary", amount: 10000 }),
   );
   assert.equal(accountBalance(state, "bank"), 107500);
+});
+test("balancesByAccount matches accountBalance for every account", () => {
+  // Built directly (not via saveTransaction) to include a future-dated entry.
+  const state: FinanceState = {
+    ...fixture(),
+    transactions: [
+      tx({ id: "a", amount: 1234 }),
+      tx({ id: "b", kind: "income", categoryId: "salary", amount: 98765, accountId: "cash" }),
+      tx({ id: "c", kind: "transfer", toAccountId: "usd", received: 77, categoryId: "", amount: 4321 }),
+      tx({ id: "d", kind: "transfer", toAccountId: "card", categoryId: "", amount: 500 }),
+      tx({ id: "e", accountId: "card", amount: 333, date: "2020-01-01" }),
+      tx({ id: "f", amount: 9999, date: "2999-01-01" }),
+      tx({ id: "g", accountId: "missing", amount: 10 }),
+    ],
+  };
+  for (const through of [today(), "2020-01-01", "2999-12-31"]) {
+    const balances = balancesByAccount(state, through);
+    assert.equal(balances.size, state.accounts.length);
+    for (const a of state.accounts)
+      assert.equal(balances.get(a.id), accountBalance(state, a.id, through));
+  }
 });
 test("editing replaces an existing entry rather than duplicating it", () => {
   let state = saveTransaction(fixture(), tx());

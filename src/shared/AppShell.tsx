@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { Uniwind } from "uniwind";
-import { useFinance } from "@/features/finance/store";
+import { useFinance, useNotice } from "@/features/finance/store";
 import { authenticate } from "@/features/finance/device";
 import { Action, FormError, Icon, Row, Txt, tap, useTheme } from "./ui";
 import { useT } from "./i18n/react";
@@ -45,9 +45,9 @@ export function AppShell() {
     retry,
     canStartEmpty,
     startEmpty,
-    notice,
     setNotice,
   } = useFinance();
+  const notice = useNotice();
   const { colors, isDark } = useTheme();
   const { t } = useT();
   const unlocked = useSyncExternalStore(
